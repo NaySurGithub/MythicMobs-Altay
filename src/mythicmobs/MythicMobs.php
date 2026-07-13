@@ -136,6 +136,32 @@ final class MythicMobs extends PluginBase implements Listener
         $this->reloadConfig();
         $this->generalConfig = new Config($this->getDataFolder() . "config-general.yml", Config::YAML);
         $this->mobConfig = new Config($this->getDataFolder() . "config-mobs.yml", Config::YAML);
+        $mobConfigChanged = false;
+        if (
+            $this->mobConfig->getNested(
+                "Configuration.Spawners.Stackable"
+            ) === null
+        ) {
+            $this->mobConfig->setNested(
+                "Configuration.Spawners.Stackable",
+                false
+            );
+            $mobConfigChanged = true;
+        }
+        if (
+            $this->mobConfig->getNested(
+                "Configuration.Spawners.MaxMobsPerChunk"
+            ) === null
+        ) {
+            $this->mobConfig->setNested(
+                "Configuration.Spawners.MaxMobsPerChunk",
+                16
+            );
+            $mobConfigChanged = true;
+        }
+        if ($mobConfigChanged) {
+            $this->mobConfig->save();
+        }
         $this->models?->reload();
         $this->items = $this->loadDefinitions("Items");
         $this->drops?->reload();

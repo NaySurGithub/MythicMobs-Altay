@@ -21,6 +21,7 @@ use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\EntityDeathEvent;
 use pocketmine\event\entity\EntityRegainHealthEvent;
 use pocketmine\player\Player;
+use pocketmine\world\Position;
 
 final class MobManager
 {
@@ -220,6 +221,57 @@ final class MobManager
         }
         ksort($result);
         return $result;
+    }
+
+    public function countInChunk(
+        string $key,
+        Position $position
+    ): int {
+        $chunkX = $position->getFloorX() >> 4;
+        $chunkZ = $position->getFloorZ() >> 4;
+        $count = 0;
+        foreach ($this->active as $data) {
+            $entity = $data["entity"];
+            if (
+                $entity->isClosed() ||
+                strcasecmp($data["key"], $key) !== 0 ||
+                $entity->getWorld() !== $position->getWorld() ||
+                ($entity->getPosition()->getFloorX() >> 4) !== $chunkX ||
+                ($entity->getPosition()->getFloorZ() >> 4) !== $chunkZ
+            ) {
+                continue;
+            }
+
+            ++$count;
+        }
+
+        return $count;
+    }
+
+    public function hasNearbyMob(
+        string $key,
+        Position $position,
+        float $radius = 1.0
+    ): bool {
+        $maximumDistance = $radius * $radius;
+        foreach ($this->active as $data) {
+            $entity = $data["entity"];
+            if (
+                $entity->isClosed() ||
+                strcasecmp($data["key"], $key) !== 0 ||
+                $entity->getWorld() !== $position->getWorld()
+            ) {
+                continue;
+            }
+            if (
+                $entity->getPosition()->distanceSquared($position) <=
+                $maximumDistance
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
     public function killByName(string $key): int
     {

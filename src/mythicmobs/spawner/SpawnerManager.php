@@ -102,8 +102,51 @@ final class SpawnerManager
             }
             $radius = max(0, (int) ($definition["Radius"] ?? 0));
             $location = new Location((float) ($definition["X"] ?? 0) + ($radius > 0 ? mt_rand(-$radius, $radius) : 0), (float) ($definition["Y"] ?? 64), (float) ($definition["Z"] ?? 0) + ($radius > 0 ? mt_rand(-$radius, $radius) : 0), $world, 0, 0);
+            $mobName = (string) (
+                $definition["MobName"] ??
+                $definition["Mob"] ??
+                ""
+            );
+            $chunkLimit = max(
+                0,
+                (int) (
+                    $definition["MaxMobsPerChunk"] ??
+                    $this->plugin->mobSetting(
+                        "Configuration.Spawners.MaxMobsPerChunk",
+                        16
+                    )
+                )
+            );
+            if (
+                $chunkLimit > 0 &&
+                $this->plugin->getMobManager()->countInChunk(
+                    $mobName,
+                    $location
+                ) >= $chunkLimit
+            ) {
+                $this->lastSpawn[$name] = $now;
+                continue;
+            }
+            $stackable = (bool) (
+                $definition["Stackable"] ??
+                $this->plugin->mobSetting(
+                    "Configuration.Spawners.Stackable",
+                    false
+                )
+            );
+            if (
+                !$stackable &&
+                $this->plugin->getMobManager()->hasNearbyMob(
+                    $mobName,
+                    $location,
+                    1.0
+                )
+            ) {
+                $this->lastSpawn[$name] = $now;
+                continue;
+            }
             $level = array_key_exists("Level", $definition) ? $this->plugin->getMobManager()->rollLevel($definition["Level"], "spawner $name") : 0;
-            $entity = $this->plugin->getMobManager()->spawn((string) ($definition["MobName"] ?? $definition["Mob"] ?? ""), $location, $level, (bool) ($definition["UseWorldScaling"] ?? false));
+            $entity = $this->plugin->getMobManager()->spawn($mobName, $location, $level, (bool) ($definition["UseWorldScaling"] ?? false));
             if ($entity !== null) {
                 $this->spawned[$name][] = $entity->getId();
                 $this->lastSpawn[$name] = $now;
@@ -455,7 +498,22 @@ final class SpawnerManager
         if (!isset($this->definitions[$name])) {
             return false;
         }
-        $map = ["mob" => "MobName", "mobname" => "MobName", "interval" => "Interval", "maxmobs" => "MaxMobs", "radius" => "Radius", "level" => "Level", "useworldscaling" => "UseWorldScaling", "enabled" => "Enabled", "x" => "X", "y" => "Y", "z" => "Z", "world" => "World"];
+        $map = [
+            "mob" => "MobName",
+            "mobname" => "MobName",
+            "interval" => "Interval",
+            "maxmobs" => "MaxMobs",
+            "maxmobsperchunk" => "MaxMobsPerChunk",
+            "stackable" => "Stackable",
+            "radius" => "Radius",
+            "level" => "Level",
+            "useworldscaling" => "UseWorldScaling",
+            "enabled" => "Enabled",
+            "x" => "X",
+            "y" => "Y",
+            "z" => "Z",
+            "world" => "World",
+        ];
         $key = $map[strtolower($setting)] ?? $setting;
         $this->definitions[$name][$key] = is_numeric($value) ? (float) $value : (in_array(strtolower((string) $value), ["true", "false"], true) ? strtolower((string) $value) === "true" : $value);
         $this->saveRuntime();

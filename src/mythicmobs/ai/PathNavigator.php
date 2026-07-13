@@ -59,11 +59,43 @@ final class PathNavigator
             return;
         }
         $vertical = $entity->getMotion()->y;
-        if ($delta->y > 0.35 && $entity->isOnGround()) {
-            $vertical = 0.36;
+        if (
+            $entity->isOnGround() &&
+            (
+                $delta->y > 0.35 ||
+                $this->hasOneBlockObstacle($entity, $delta)
+            )
+        ) {
+            $vertical = 0.42;
         }
         $entity->setMotion(new Vector3($delta->x / $horizontal * $speed, $vertical, $delta->z / $horizontal * $speed));
         $entity->lookAt($waypoint->add(0, 1, 0));
+    }
+
+    private function hasOneBlockObstacle(
+        Living $entity,
+        Vector3 $direction
+    ): bool {
+        $horizontal = new Vector3($direction->x, 0, $direction->z);
+        if ($horizontal->lengthSquared() < 0.0001) {
+            return false;
+        }
+
+        $ahead = $entity->getPosition()->addVector(
+            $horizontal->normalize()->multiply(0.7)
+        );
+        $world = $entity->getWorld();
+        $x = $ahead->getFloorX();
+        $y = $entity->getPosition()->getFloorY();
+        $z = $ahead->getFloorZ();
+        $feetBlocked = $world->getBlockAt($x, $y, $z)
+            ->getCollisionBoxes() !== [];
+        $headClear = $world->getBlockAt($x, $y + 1, $z)
+            ->getCollisionBoxes() === [];
+        $aboveClear = $world->getBlockAt($x, $y + 2, $z)
+            ->getCollisionBoxes() === [];
+
+        return $feetBlocked && $headClear && $aboveClear;
     }
 
     /** @return list<Vector3> */

@@ -1,4 +1,7 @@
 Configuration:
+  Spawners:
+    Stackable: false
+    MaxMobsPerChunk: 16
   Mobs:
     CancelDamageIfZero: false
     KillMessagePrefix: ''
