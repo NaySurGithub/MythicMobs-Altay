@@ -650,7 +650,7 @@ The root command is `/mythicmobs`. Aliases: `/mm`, `/mythic`.
 | `/mm spawners resettimers <name>` | Reset a spawner timer. |
 | `/mm spawners delete <name>` | Delete a runtime spawner. |
 
-Spawner items preserve the complete spawner definition in NBT. Place the block to create an enabled runtime spawner at that location. Breaking a placed Mythic spawner returns its configured block and removes the runtime definition.
+Spawner items preserve the complete spawner definition in NBT. Place the block to create an enabled runtime spawner at that location. The configured mob is rendered and animated inside the cage. Breaking a placed Mythic spawner returns its configured block and removes the runtime definition.
 
 Administrative operations require `mythicmobs.admin`, which defaults to server operators.
 

@@ -54,6 +54,7 @@ use pocketmine\utils\Config;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
+use pocketmine\world\Position;
 use pocketmine\world\World;
 
 final class MythicMobs extends PluginBase implements Listener
@@ -139,6 +140,14 @@ final class MythicMobs extends PluginBase implements Listener
         $this->skills?->reload();
         $this->mobs?->reload();
         $this->spawners?->reload();
+        if (isset($this->spawners)) {
+            $this->getScheduler()->scheduleDelayedTask(
+                new ClosureTask(
+                    fn () => $this->spawners->refreshDisplays()
+                ),
+                1
+            );
+        }
     }
 
     /** @return array<string, array<string, mixed>> */
@@ -946,11 +955,24 @@ final class MythicMobs extends PluginBase implements Listener
                 continue;
             }
 
+            $position = Position::fromObject(
+                $block->getPosition(),
+                $block->getPosition()->getWorld()
+            );
             $name = $this->spawners->placeItem(
                 $event->getItem(),
-                $block->getPosition()
+                $position
             );
             if ($name !== null) {
+                $this->getScheduler()->scheduleDelayedTask(
+                    new ClosureTask(
+                        fn () => $this->spawners->updateDisplay(
+                            $name,
+                            $position
+                        )
+                    ),
+                    1
+                );
                 $event->getPlayer()->sendMessage(
                     TextFormat::GREEN . "Placed Mythic spawner $name."
                 );

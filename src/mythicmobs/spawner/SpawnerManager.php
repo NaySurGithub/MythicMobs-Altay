@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace mythicmobs\spawner;
 
 use mythicmobs\MythicMobs;
+use pocketmine\block\tile\MonsterSpawner as MonsterSpawnerTile;
 use pocketmine\entity\Location;
 use pocketmine\item\Item;
 use pocketmine\item\StringToItemParser;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
+use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\world\Position;
 
 final class SpawnerManager
@@ -170,6 +173,104 @@ final class SpawnerManager
         }
 
         return null;
+    }
+
+    public function updateDisplay(string $name, Position $position): bool
+    {
+        $definition = $this->definitions[$name] ?? null;
+        if ($definition === null) {
+            return false;
+        }
+
+        $mobName = (string) (
+            $definition["MobName"] ??
+            $definition["Mob"] ??
+            ""
+        );
+        $mob = $this->plugin->getMobManager()->definitions()[$mobName] ?? null;
+        if ($mob === null) {
+            return false;
+        }
+
+        $tile = $position->getWorld()->getTile($position);
+        if (!$tile instanceof MonsterSpawnerTile) {
+            return false;
+        }
+
+        $type = strtolower((string) (
+            $mob["NetworkType"] ??
+            $mob["Type"] ??
+            "zombie"
+        ));
+        $identifier = str_contains($type, ":")
+            ? $type
+            : "minecraft:" . $type;
+        [$defaultWidth, $defaultHeight] = $this->displaySize($type);
+        $options = (array) ($mob["Options"] ?? []);
+        $width = max(
+            0.05,
+            (float) ($definition["DisplayEntityWidth"] ?? $defaultWidth)
+        );
+        $height = max(
+            0.05,
+            (float) ($definition["DisplayEntityHeight"] ?? $defaultHeight)
+        );
+        $scale = max(
+            0.05,
+            (float) (
+                $definition["DisplayEntityScale"] ??
+                $options["Scale"] ??
+                1.0
+            )
+        );
+
+        $tile->readSaveData(
+            CompoundTag::create()
+                ->setString("EntityIdentifier", $identifier)
+                ->setFloat("DisplayEntityWidth", $width)
+                ->setFloat("DisplayEntityHeight", $height)
+                ->setFloat("DisplayEntityScale", $scale)
+        );
+        $tile->clearSpawnCompoundCache();
+
+        $packet = BlockActorDataPacket::create(
+            BlockPosition::fromVector3($position),
+            $tile->getSerializedSpawnCompound()
+        );
+        $position->getWorld()->broadcastPacketToViewers($position, $packet);
+
+        return true;
+    }
+
+    public function refreshDisplays(): void
+    {
+        $worldManager = $this->plugin->getServer()->getWorldManager();
+        foreach ($this->definitions as $name => $definition) {
+            $worldName = (string) ($definition["World"] ?? "");
+            $world = $worldManager->getWorldByName($worldName);
+            if ($world === null) {
+                continue;
+            }
+
+            $position = new Position(
+                (float) ($definition["X"] ?? 0),
+                (float) ($definition["Y"] ?? 0),
+                (float) ($definition["Z"] ?? 0),
+                $world
+            );
+            $this->updateDisplay($name, $position);
+        }
+    }
+
+    /** @return array{float,float} */
+    private function displaySize(string $type): array
+    {
+        return match ($type) {
+            "skeleton", "stray", "wither_skeleton" => [0.6, 1.99],
+            "villager", "villager_v2" => [0.6, 1.95],
+            "squid" => [0.8, 0.8],
+            default => [0.6, 1.95],
+        };
     }
 
     /** @return array{name:string,definition:array<string,mixed>}|null */
