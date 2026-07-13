@@ -1,0 +1,65 @@
+UndeadWarriorTemplate:
+  Type: skeleton
+  Faction: Undead
+  Options:
+    PreventOtherDrops: true
+    FollowRange: 24
+  KillMessages:
+    - '<target.name> joined the ranks of the undead'
+
+SkeletalKnight:
+  Template: UndeadWarriorTemplate
+  NetworkType: mythicmobs:skeletal_knight
+  Display: '&6Skeletal Knight &7<caster.level>'
+  Level: 3to7
+  Health: 40
+  Damage: 5
+  LevelModifiers:
+    Health: 5
+    Damage: 0.5
+    MovementSpeed: 0.005
+    KnockbackResistance: 0.02
+    Armor: 0.5
+    Power: 0.1
+  BossBar:
+    Enabled: true
+    Title: '&6<caster.name> &7[Lv. <caster.level>]'
+    Range: 30
+    Color: RED
+    Style: SEGMENTED_10
+    CreateFog: false
+    DarkenSky: false
+    PlayMusic: false
+  AIGoalSelectors:
+    - clear
+    - 1 opendoors
+    - 2 leapattarget
+    - 3 meleeattack{interval=1}
+    - 8 randomstroll{radius=10}
+  AITargetSelectors:
+    - clear
+    - 1 hurtbytarget
+    - 2 players
+  Options:
+    MovementSpeed: 0.23
+    FollowRange: 18
+    AlwaysShowName: true
+    KnockbackResistance: 0.25
+  DamageModifiers:
+    - ENTITY_ATTACK 0.75
+    - PROJECTILE 0.75
+    - FIRE -0.25
+    - FIRE_TICK 0
+  KillMessages:
+    - '<target.name> was defeated by <caster.name>'
+    - '<target.name><&sq>s soul was claimed by <mob.name>'
+  Skills:
+    - skill{s=KnightEntrance;amount=6} @self ~onSpawn
+    - message{m="&6<caster.name>&f has awakened!"} @PlayersInRadius{r=20} ~onSpawn
+    - skill{s=KnightBash} @target ~onAttack 0.25
+    - effect:particles{p=flame;amount=12} @self ~onDamaged <50% 0.3
+  Drops:
+    - KnightRewards
+  DropsPerPlayer: true
+  MinimumDamagePercentForDrops: 0.05
+  ClientsideDrops: true

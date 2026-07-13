@@ -1,0 +1,18 @@
+WeaponTemplate:
+  Id: iron_sword
+  Lore:
+    - '&8Forged for Mythic warriors.'
+  Enchantments:
+    - unbreaking:1
+
+MythicBlade:
+  Template: WeaponTemplate
+  Display: '&6Mythic Blade'
+  Lore:
+    - '&7Recovered from a custom boss.'
+  Enchantments:
+    - sharpness:2
+  Skills:
+    - effect:particles{p=flame;amount=8} @self ~onUse
+    - effect:particles{p=crit;amount=6} @target ~onAttack
+    - effect:particles{p=smoke;amount=4} @self ~onDrop

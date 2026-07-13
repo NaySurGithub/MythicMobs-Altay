@@ -1,0 +1,12 @@
+# Enable and position this example, or use /mm spawners create.
+example_knight:
+  MobName: SkeletalKnight
+  World: world
+  X: 0
+  'Y': 64
+  Z: 0
+  Radius: 3
+  Interval: 60
+  MaxMobs: 2
+  Level: 1
+  Enabled: false

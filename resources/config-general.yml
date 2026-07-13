@@ -1,0 +1,53 @@
+Configuration:
+  Version: 5.6
+  General:
+    AllowMetrics: false
+    AnnounceOpReload: false
+    CheckForUpdates: false
+    DebugLevel: 0
+    DebugMode: false
+    DebugSpawners: false
+    ErrorLogging: true
+    ThreadPoolSize: -1
+    UseVirtualThreads: false
+    ShareComponents: false
+    CompatibilityMode: false
+  Packet:
+    ParticleBundleEnabled: false
+    ParticleBundleSize: 512
+    ParticleTickBatchEnabled: false
+    RespectClientParticleVisibility: false
+    ClientParticleVisibility:
+      All: 100
+      Decreased: 50
+      Minimal: 10
+  Features:
+    PlayerFactions: true
+    RandomSpawning: true
+    Spawners: true
+  Commands:
+    SendGiveItemFeedback: true
+  Clock:
+    Main: 1
+    Saving: 300
+    Spawners: 2
+    RandomSpawning: 1
+    Scanner: 10
+    Cleanup: 600
+  Compatibility:
+    ProtocolLib:
+      Enabled: false
+    Heroes:
+      Enabled: false
+    McMMO:
+      Enabled: false
+      ShowXPMessage: true
+      XPMessageFormat: '&7You receive <drop.amount> experience for slaying <dropper.name>'
+    SkillAPI:
+      Enabled: false
+      ShowXPMessage: true
+      XPMessageFormat: '&7You receive <drop.amount> experience for slaying <dropper.name>'
+    Vault:
+      Enabled: false
+      ShowMoneyMessage: true
+      MoneyMessageFormat: '&7You receive <drop.amount> currency for slaying <dropper.name>'

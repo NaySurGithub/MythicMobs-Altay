@@ -1,0 +1,16 @@
+SkeletalKnightModel:
+  Identifier: mythicmobs:skeletal_knight
+  Summonable: true
+  Materials:
+    default: entity_alphatest
+  Textures:
+    default: textures/entity/skeleton/skeleton
+  Geometry:
+    default: geometry.skeleton
+  Animations: {}
+  AnimationControllers: {}
+  Scripts:
+    animate: []
+  RenderControllers:
+    - controller.render.default
+

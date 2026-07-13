@@ -1,0 +1,4 @@
+# Legacy compatibility overrides. New installations should use config-general.yml and config-mobs.yml.
+ai-period-ticks: 1
+spawner-period-ticks: 2
+

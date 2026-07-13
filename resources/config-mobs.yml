@@ -1,0 +1,72 @@
+Configuration:
+  Mobs:
+    CancelDamageIfZero: false
+    KillMessagePrefix: ''
+  DefaultMobOptions:
+    Despawn: true
+    PreventOtherDrops: false
+    PreventVanillaDamage: false
+  MobDrops:
+    DefaultDropMethod: VANILLA
+    DoLootsplosionByDefault: false
+    DoHologramNameByDefault: false
+    DoItemGlowByDefault: false
+    DoItemBeamByDefault: false
+    DoItemVFXByDefault: false
+    DoPerPlayerDropsByDefault: false
+    MinimumDamagePercentForDrops: 0.00
+    DoClientsideDropsByDefault: false
+    DefaultItemVFX:
+      Material: potion
+      Model: 1
+    DefaultDeathChatMessage:
+      - '&c&lDEFEATED <mob.name>'
+      - '&6Rank: &f#<player.rank>'
+      - '&6Damage: &f<player.damage>'
+  MobEggs:
+    Material: zombie_spawn_egg
+    Model: 0
+    DefaultDisplay: '<mob.name> Spawn Egg'
+    DefaultLore:
+      - '&8A Mythical Egg that can'
+      - '&8be used to resurrect a'
+      - '&8<mob.name>'
+  Holograms:
+    GlobalOffset: 0.15
+    CastBar:
+      InfoBackground: '0,0,0,0'
+      InfoBillboarding: VERTICAL
+      CastBackground: '0,0,0,0'
+      CastBillboarding: VERTICAL
+      Offset: 1
+    HealthBar:
+      Background: '0,0,0,0'
+      Billboarding: VERTICAL
+      Offset: -0.05
+      Length: 50
+      Scale: '0.4,0.4,0.4'
+    Nameplate:
+      Background: '0,0,0,60'
+      Billboarding: VERTICAL
+      Offset: 0
+    Speech:
+      Background: '100,100,100,60'
+      Billboarding: VERTICAL
+      LinePrefix: '<white>'
+      Offset: 0.4
+  MobLeveling:
+    ScalingEquations:
+      Health: 'V * ((1.05)^(L-1))'
+      Damage: 'V * ((1.05)^(L-1))'
+      Scale: 'V'
+    DefaultLevelModifiers:
+      Health: 0.1
+      Armor: 0
+      Damage: 0
+      KnockbackResistance: 0
+      Power: 0
+    WorldScaling:
+      Default:
+        Enabled: true
+        ScaleVanillaMobs: false
+        PerBlocksFromSpawn: 250

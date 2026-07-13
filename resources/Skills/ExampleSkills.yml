@@ -1,0 +1,19 @@
+KnightBash:
+  Cooldown: 4
+  Skills:
+    - damage{amount=7} @target
+    - potion{type=slowness;duration=60;level=1} @target
+    - message{m="&cThe knight crushes you with its shield!"} @target
+
+KnightBaseEffects:
+  Skills:
+    - setvariable{var=skill.effectamount;val=<skill.amount>}
+    - effect:particles{p=smoke;amount=<skill.var.effectamount>}
+
+KnightEntrance:
+  Cooldown: 1
+  Skill: KnightBaseEffects
+  Skills:
+    - delay 2
+    - effect:particles{p=flame;amount=<skill.var.effectamount>}
+    - 'skill{s=[ - effect:particles{p=smoke;amount=2} - delay 1 - effect:particles{p=flame;amount=2} ]}'

@@ -1,0 +1,25 @@
+name: MythicMobs
+main: mythicmobs\MythicMobs
+version: 1.0.0
+api: 5.0.0
+author: Codex
+description: YAML-driven custom mobs, skills, items, drops, factions, AI and spawners for Altay/PocketMine.
+commands:
+  mythicmobs:
+    description: Manage MythicMobs
+    usage: /mm help
+    aliases: [mm, mythic]
+    permission: mythicmobs.command
+permissions:
+  mythicmobs.command:
+    default: true
+  mythicmobs.admin:
+    default: op
+  mythicmobs.command.mobs.list:
+    default: op
+  mythicmobs.command.info:
+    default: op
+  mythicmobs.command.test.cast:
+    default: op
+  mythicmobs.loot.rare:
+    default: op
