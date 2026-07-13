@@ -15,6 +15,8 @@ final class ModelManager
     private const PACK_PREFIX = "MythicMobsModels-";
     /** @var array<string, array<string,mixed>> */
     private array $definitions = [];
+    /** @var array<string,true> */
+    private array $packedAssets = [];
 
     public function __construct(private MythicMobs $plugin)
     {
@@ -74,6 +76,7 @@ final class ModelManager
                     "version" => [1, 0, 0],
                 ]],
             ]);
+            $this->packedAssets = [];
             foreach ($this->definitions as $name => $definition) {
                 $this->addModel($zip, $name, $definition);
             }
@@ -149,17 +152,199 @@ final class ModelManager
             return;
         }
         $safe = preg_replace('/[^a-z0-9_.-]+/', "_", str_replace(":", ".", $identifier));
+        $definition = $this->discoverAssets($definition, $identifier);
         $geometry = $this->assetMap($zip, $definition["Geometry"] ?? ["default" => "geometry.humanoid"], "models/entity", "geo.json");
         $textures = $this->assetMap($zip, $definition["Textures"] ?? ["default" => "textures/entity/skeleton/skeleton"], "textures/entity", "png");
         $animations = $this->namedAssets($zip, $definition["Animations"] ?? [], "animations", "animation.json");
         $controllers = $this->namedAssets($zip, $definition["AnimationControllers"] ?? [], "animation_controllers", "animation_controllers.json");
+        $renderController = "controller.render.$safe";
+        $this->addJson(
+            $zip,
+            "render_controllers/$safe.render_controllers.json",
+            [
+                "format_version" => "1.10.0",
+                "render_controllers" => [
+                    $renderController => [
+                        "geometry" => "Geometry.default",
+                        "materials" => [["*" => "Material.default"]],
+                        "textures" => ["Texture.default"],
+                    ],
+                ],
+            ]
+        );
+        $renderControllers = [$renderController];
+        foreach ((array) ($definition["RenderControllers"] ?? []) as $value) {
+            if (is_string($value) && $value !== "") {
+                $renderControllers[] = $value;
+            }
+        }
         $client = ["format_version" => "1.10.0", "minecraft:client_entity" => ["description" => [
             "identifier" => $identifier, "materials" => $definition["Materials"] ?? ["default" => "entity_alphatest"],
             "textures" => $textures, "geometry" => $geometry, "animations" => array_merge($animations, $controllers),
             "scripts" => $definition["Scripts"] ?? ["animate" => array_keys($controllers)],
-            "render_controllers" => $definition["RenderControllers"] ?? ["controller.render.default"],
+            "render_controllers" => array_values(array_unique($renderControllers)),
         ]]];
         $this->addJson($zip, "entity/$safe.entity.json", $client);
+    }
+
+    /** @param array<string,mixed> $definition @return array<string,mixed> */
+    private function discoverAssets(
+        array $definition,
+        string $identifier
+    ): array {
+        $localName = str_contains($identifier, ":")
+            ? explode(":", $identifier, 2)[1]
+            : $identifier;
+        $assetPrefix = "assets/" . preg_replace(
+            '/[^a-z0-9_.-]+/',
+            "_",
+            strtolower($localName)
+        );
+
+        if (
+            empty($definition["Geometry"]) &&
+            $this->assetExists("$assetPrefix.geo.json")
+        ) {
+            $geometryId = $this->firstJsonKey(
+                "$assetPrefix.geo.json",
+                "minecraft:geometry"
+            );
+            $definition["Geometry"] = [
+                "default" => [
+                    "File" => "$assetPrefix.geo.json",
+                    "Identifier" => $geometryId ?? "geometry.$localName",
+                ],
+            ];
+        }
+        if (
+            empty($definition["Textures"]) &&
+            $this->assetExists("$assetPrefix.png")
+        ) {
+            $definition["Textures"] = [
+                "default" => [
+                    "File" => "$assetPrefix.png",
+                    "Identifier" => "textures/entity/$localName",
+                ],
+            ];
+        }
+        if (
+            empty($definition["Animations"]) &&
+            $this->assetExists("$assetPrefix.animation.json")
+        ) {
+            $definition["Animations"] = $this->discoverNamedJsonAssets(
+                "$assetPrefix.animation.json",
+                "animations"
+            );
+        }
+        if (
+            empty($definition["AnimationControllers"]) &&
+            $this->assetExists("$assetPrefix.animation_controllers.json")
+        ) {
+            $definition["AnimationControllers"] =
+                $this->discoverNamedJsonAssets(
+                    "$assetPrefix.animation_controllers.json",
+                    "animation_controllers"
+                );
+        }
+
+        return $definition;
+    }
+
+    private function assetExists(string $relative): bool
+    {
+        return is_file(
+            $this->plugin->getDataFolder()
+            . "Models"
+            . DIRECTORY_SEPARATOR
+            . str_replace("/", DIRECTORY_SEPARATOR, $relative)
+        );
+    }
+
+    private function firstJsonKey(
+        string $relative,
+        string $section
+    ): ?string {
+        if ($section === "minecraft:geometry") {
+            $path = $this->plugin->getDataFolder()
+                . "Models"
+                . DIRECTORY_SEPARATOR
+                . str_replace("/", DIRECTORY_SEPARATOR, $relative);
+            $contents = @file_get_contents($path);
+            if ($contents === false) {
+                return null;
+            }
+            try {
+                $json = json_decode(
+                    $contents,
+                    true,
+                    512,
+                    JSON_THROW_ON_ERROR
+                );
+            } catch (\JsonException) {
+                return null;
+            }
+            $geometries = $json["minecraft:geometry"] ?? [];
+            if (is_array($geometries)) {
+                foreach ($geometries as $geometry) {
+                    $identifier = is_array($geometry)
+                        ? ($geometry["description"]["identifier"] ?? null)
+                        : null;
+                    if (is_string($identifier) && $identifier !== "") {
+                        return $identifier;
+                    }
+                }
+            }
+            return null;
+        }
+        $keys = $this->jsonSectionKeys($relative, $section);
+        return $keys[0] ?? null;
+    }
+
+    /** @return array<string,array{File:string,Identifier:string}> */
+    private function discoverNamedJsonAssets(
+        string $relative,
+        string $section
+    ): array {
+        $result = [];
+        foreach ($this->jsonSectionKeys($relative, $section) as $identifier) {
+            $segments = explode(".", $identifier);
+            $alias = (string) end($segments);
+            if ($alias === "" || isset($result[$alias])) {
+                $alias = str_replace(".", "_", $identifier);
+            }
+            $result[$alias] = [
+                "File" => $relative,
+                "Identifier" => $identifier,
+            ];
+        }
+        return $result;
+    }
+
+    /** @return list<string> */
+    private function jsonSectionKeys(
+        string $relative,
+        string $section
+    ): array {
+        $path = $this->plugin->getDataFolder()
+            . "Models"
+            . DIRECTORY_SEPARATOR
+            . str_replace("/", DIRECTORY_SEPARATOR, $relative);
+        $contents = @file_get_contents($path);
+        if ($contents === false) {
+            return [];
+        }
+        try {
+            $json = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
+            $this->plugin->getLogger()->warning(
+                "Invalid model JSON $relative: " . $exception->getMessage()
+            );
+            return [];
+        }
+        $values = is_array($json[$section] ?? null)
+            ? $json[$section]
+            : [];
+        return array_values(array_filter(array_keys($values), "is_string"));
     }
 
     /** @return array<string,string> */
@@ -173,7 +358,18 @@ final class ModelManager
             if (is_array($value)) {
                 $result[(string) $alias] = (string) ($value["Identifier"] ?? "");
                 if (isset($value["File"])) {
-                    $this->copyAsset($zip, (string) $value["File"], "$folder/" . basename((string) $value["File"]));
+                    $destination = "$folder/" . basename((string) $value["File"]);
+                    if (
+                        $extension === "png" &&
+                        str_starts_with($result[(string) $alias], "textures/")
+                    ) {
+                        $destination = $result[(string) $alias] . ".png";
+                    }
+                    $this->copyAsset(
+                        $zip,
+                        (string) $value["File"],
+                        $destination
+                    );
                 }
             } else {
                 $result[(string) $alias] = (string) $value;
@@ -194,7 +390,12 @@ final class ModelManager
             $this->plugin->getLogger()->warning("Missing/unsafe model asset: $relative");
             return;
         }
-        $zip->addFile($source, str_replace("\\", "/", $destination));
+        $destination = str_replace("\\", "/", $destination);
+        if (isset($this->packedAssets[$destination])) {
+            return;
+        }
+        $zip->addFile($source, $destination);
+        $this->packedAssets[$destination] = true;
     }
     /** @param array<mixed> $data */
     private function addJson(\ZipArchive $zip, string $path, array $data): void

@@ -2,6 +2,24 @@
 
 Create a YAML file in `plugin_data/MythicMobs/Models`. Every model identifier automatically receives a concrete server entity class, `EntityFactory` registration, and client actor registration.
 
+The simplest setup needs only an identifier:
+
+```yaml
+FrostGolemModel:
+  Identifier: rpg:frost_golem
+```
+
+Then place these files in `plugin_data/MythicMobs/Models/assets`:
+
+```text
+frost_golem.geo.json
+frost_golem.png
+frost_golem.animation.json
+frost_golem.animation_controllers.json
+```
+
+Geometry identifiers, animation identifiers, and animation-controller identifiers are discovered from the JSON automatically. The plugin also generates the client-entity definition and a dedicated render controller.
+
 ```yaml
 FrostGolemModel:
   Identifier: rpg:frost_golem
@@ -42,4 +60,4 @@ FrostGolem:
     - animation{a=attack;blendout=0.15} @self ~onAttack
 ```
 
-Run `/mm models build`, then restart the server. The plugin creates a content-versioned `resource_packs/MythicMobsModels-<hash>.mcpack` and adds it to the resource stack. A restart is required because Altay loads resource packs before plugins.
+The pack is rebuilt automatically when model definitions or asset contents change. You can also run `/mm models build` manually. Restart afterward so Altay loads the generated content-versioned `resource_packs/MythicMobsModels-<hash>.mcpack` from the resource stack.

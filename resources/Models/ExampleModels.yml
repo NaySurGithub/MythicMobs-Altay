@@ -14,3 +14,8 @@ SkeletalKnightModel:
   RenderControllers:
     - controller.render.default
 
+# Automatic convention: put these files in Models/assets and only set Identifier:
+# skeletal_knight.geo.json
+# skeletal_knight.png
+# skeletal_knight.animation.json
+# skeletal_knight.animation_controllers.json
