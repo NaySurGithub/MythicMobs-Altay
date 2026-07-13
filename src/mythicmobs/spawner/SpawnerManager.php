@@ -68,12 +68,20 @@ final class SpawnerManager
             if ($world === null) {
                 continue;
             }
+            $blockX = (int) ($definition["X"] ?? 0);
+            $blockY = (int) ($definition["Y"] ?? 0);
+            $blockZ = (int) ($definition["Z"] ?? 0);
+            $chunkLoaded = $world->isChunkLoaded(
+                $blockX >> 4,
+                $blockZ >> 4
+            );
             if (
                 (bool) ($definition["Physical"] ?? false) &&
+                $chunkLoaded &&
                 $world->getBlockAt(
-                    (int) ($definition["X"] ?? 0),
-                    (int) ($definition["Y"] ?? 0),
-                    (int) ($definition["Z"] ?? 0)
+                    $blockX,
+                    $blockY,
+                    $blockZ
                 )->getTypeId() !== BlockTypeIds::MONSTER_SPAWNER
             ) {
                 unset(
