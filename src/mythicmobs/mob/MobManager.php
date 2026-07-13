@@ -560,6 +560,16 @@ final class MobManager
             if ($best !== null) {
                 return $best;
             }
+            if (in_array($name, ["players", "nearestplayer"], true)) {
+                continue;
+            }
+            if (in_array(
+                $name,
+                ["hurtbytarget", "attacker", "attackers"],
+                true
+            )) {
+                continue;
+            }
             foreach ($this->active as $otherId => $other) {
                 if ($otherId === $mob->getId()) {
                     continue;

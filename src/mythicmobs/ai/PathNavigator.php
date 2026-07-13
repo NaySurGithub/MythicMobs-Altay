@@ -18,8 +18,8 @@ final class PathNavigator
     private array $movement = [];
     private int $tick = 0;
     private int $searchesThisTick = 0;
-    private const MAX_SEARCHES_PER_TICK = 2;
-    private const MAX_VISITED_NODES = 384;
+    private const MAX_SEARCHES_PER_TICK = 1;
+    private const MAX_VISITED_NODES = 256;
 
     public function tick(): void
     {
@@ -45,7 +45,11 @@ final class PathNavigator
         $id = $entity->getId();
         $goalKey = $goal->getFloorX() . ":" . $goal->getFloorY() . ":" . $goal->getFloorZ();
         $state = $this->states[$id] ?? null;
-        if ($state === null || $state["goal"] !== $goalKey || $state["index"] >= count($state["path"]) || $this->tick >= $state["repath"]) {
+        if (
+            $state === null ||
+            $state["goal"] !== $goalKey ||
+            $this->tick >= $state["repath"]
+        ) {
             $path = $state["path"] ?? [];
             $searched = false;
             if ($this->searchesThisTick < self::MAX_SEARCHES_PER_TICK) {
@@ -66,7 +70,11 @@ final class PathNavigator
                 "path" => $path,
                 "index" => 0,
                 "goal" => $goalKey,
-                "repath" => $this->tick + ($searched ? 10 : 1),
+                "repath" => $this->tick + (
+                    $searched
+                        ? ($path === [] ? 40 : 20)
+                        : 1
+                ),
             ];
             $this->states[$id] = $state;
         }
