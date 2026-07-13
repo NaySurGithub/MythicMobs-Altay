@@ -17,6 +17,7 @@ use mythicmobs\entity\SkeletalKnightEntity;
 use mythicmobs\model\ModelManager;
 use mythicmobs\bossbar\BossBarManager;
 use pocketmine\block\MonsterSpawner;
+use pocketmine\block\BlockTypeIds;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\entity\Location;
@@ -985,7 +986,10 @@ final class MythicMobs extends PluginBase implements Listener
      */
     public function onSpawnerBreak(BlockBreakEvent $event): void
     {
-        if (!$event->getBlock() instanceof MonsterSpawner) {
+        if (
+            $event->getBlock()->getTypeId() !==
+            BlockTypeIds::MONSTER_SPAWNER
+        ) {
             return;
         }
 

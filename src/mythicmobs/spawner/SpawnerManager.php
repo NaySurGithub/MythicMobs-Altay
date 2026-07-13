@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace mythicmobs\spawner;
 
 use mythicmobs\MythicMobs;
+use pocketmine\block\BlockTypeIds;
 use pocketmine\block\tile\MonsterSpawner as MonsterSpawnerTile;
+use pocketmine\block\tile\TileFactory;
 use pocketmine\entity\Location;
 use pocketmine\item\Item;
 use pocketmine\item\StringToItemParser;
@@ -42,16 +44,9 @@ final class SpawnerManager
             return;
         }
         $now = microtime(true);
+        $removedPhysicalSpawner = false;
         foreach ($this->definitions as $name => $definition) {
             if (!(bool) ($definition["Enabled"] ?? true)) {
-                continue;
-            }
-            $interval = max(1, (int) ($definition["Interval"] ?? 30));
-            if ($now - ($this->lastSpawn[$name] ?? 0) < $interval) {
-                continue;
-            }
-            $this->spawned[$name] = array_values(array_filter($this->spawned[$name] ?? [], fn (int $id) => ($entity = $this->plugin->getServer()->getWorldManager()->findEntity($id)) !== null && !$entity->isClosed()));
-            if (count($this->spawned[$name]) >= max(1, (int) ($definition["MaxMobs"] ?? 1))) {
                 continue;
             }
             $worldName = (string) ($definition["World"] ?? "world");
@@ -63,6 +58,30 @@ final class SpawnerManager
             if ($world === null) {
                 continue;
             }
+            if (
+                (bool) ($definition["Physical"] ?? false) &&
+                $world->getBlockAt(
+                    (int) ($definition["X"] ?? 0),
+                    (int) ($definition["Y"] ?? 0),
+                    (int) ($definition["Z"] ?? 0)
+                )->getTypeId() !== BlockTypeIds::MONSTER_SPAWNER
+            ) {
+                unset(
+                    $this->definitions[$name],
+                    $this->lastSpawn[$name],
+                    $this->spawned[$name]
+                );
+                $removedPhysicalSpawner = true;
+                continue;
+            }
+            $interval = max(1, (int) ($definition["Interval"] ?? 30));
+            if ($now - ($this->lastSpawn[$name] ?? 0) < $interval) {
+                continue;
+            }
+            $this->spawned[$name] = array_values(array_filter($this->spawned[$name] ?? [], fn (int $id) => ($entity = $this->plugin->getServer()->getWorldManager()->findEntity($id)) !== null && !$entity->isClosed()));
+            if (count($this->spawned[$name]) >= max(1, (int) ($definition["MaxMobs"] ?? 1))) {
+                continue;
+            }
             $radius = max(0, (int) ($definition["Radius"] ?? 0));
             $location = new Location((float) ($definition["X"] ?? 0) + ($radius > 0 ? mt_rand(-$radius, $radius) : 0), (float) ($definition["Y"] ?? 64), (float) ($definition["Z"] ?? 0) + ($radius > 0 ? mt_rand(-$radius, $radius) : 0), $world, 0, 0);
             $level = array_key_exists("Level", $definition) ? $this->plugin->getMobManager()->rollLevel($definition["Level"], "spawner $name") : 0;
@@ -71,6 +90,9 @@ final class SpawnerManager
                 $this->spawned[$name][] = $entity->getId();
                 $this->lastSpawn[$name] = $now;
             }
+        }
+        if ($removedPhysicalSpawner) {
+            $this->saveRuntime();
         }
     }
 
@@ -119,6 +141,10 @@ final class SpawnerManager
         $tag = $item->getNamedTag();
         $tag->setTag("MythicSpawner", $spawnerTag);
         $item->setNamedTag($tag);
+        $displayData = $this->displayData($definition);
+        if ($displayData !== null) {
+            $item->setCustomBlockData($displayData);
+        }
         $item->setCustomName(MythicMobs::color("&6Mythic Spawner: &f$name"));
         $item->setLore([
             MythicMobs::color("&7Mob: &f$mob"),
@@ -151,6 +177,7 @@ final class SpawnerManager
         $definition["Y"] = $position->getFloorY();
         $definition["Z"] = $position->getFloorZ();
         $definition["Enabled"] = true;
+        $definition["Physical"] = true;
 
         $this->definitions[$name] = $definition;
         $this->lastSpawn[$name] = microtime(true);
@@ -182,6 +209,74 @@ final class SpawnerManager
             return false;
         }
 
+        $displayData = $this->displayData($definition);
+        if ($displayData === null) {
+            return false;
+        }
+
+        $world = $position->getWorld();
+        if (
+            $world->getBlockAt(
+                $position->getFloorX(),
+                $position->getFloorY(),
+                $position->getFloorZ()
+            )->getTypeId() !== BlockTypeIds::MONSTER_SPAWNER
+        ) {
+            return false;
+        }
+        $tile = $world->getTile($position);
+        if (!$tile instanceof MonsterSpawnerTile) {
+            $tileData = clone $displayData;
+            $tileData
+                ->setString("id", "MobSpawner")
+                ->setInt("x", $position->getFloorX())
+                ->setInt("y", $position->getFloorY())
+                ->setInt("z", $position->getFloorZ());
+            $tile = TileFactory::getInstance()->createFromData(
+                $world,
+                $tileData
+            );
+            if (!$tile instanceof MonsterSpawnerTile) {
+                return false;
+            }
+            $world->addTile($tile);
+        }
+
+        $tile->readSaveData($displayData);
+        $tile->clearSpawnCompoundCache();
+
+        $packet = BlockActorDataPacket::create(
+            BlockPosition::fromVector3($position),
+            $tile->getSerializedSpawnCompound()
+        );
+        $world->broadcastPacketToViewers($position, $packet);
+
+        return true;
+    }
+
+    public function refreshDisplays(): void
+    {
+        $worldManager = $this->plugin->getServer()->getWorldManager();
+        foreach ($this->definitions as $name => $definition) {
+            $worldName = (string) ($definition["World"] ?? "");
+            $world = $worldManager->getWorldByName($worldName);
+            if ($world === null) {
+                continue;
+            }
+
+            $position = new Position(
+                (float) ($definition["X"] ?? 0),
+                (float) ($definition["Y"] ?? 0),
+                (float) ($definition["Z"] ?? 0),
+                $world
+            );
+            $this->updateDisplay($name, $position);
+        }
+    }
+
+    /** @param array<string,mixed> $definition */
+    private function displayData(array $definition): ?CompoundTag
+    {
         $mobName = (string) (
             $definition["MobName"] ??
             $definition["Mob"] ??
@@ -189,12 +284,7 @@ final class SpawnerManager
         );
         $mob = $this->plugin->getMobManager()->definitions()[$mobName] ?? null;
         if ($mob === null) {
-            return false;
-        }
-
-        $tile = $position->getWorld()->getTile($position);
-        if (!$tile instanceof MonsterSpawnerTile) {
-            return false;
+            return null;
         }
 
         $type = strtolower((string) (
@@ -224,42 +314,11 @@ final class SpawnerManager
             )
         );
 
-        $tile->readSaveData(
-            CompoundTag::create()
-                ->setString("EntityIdentifier", $identifier)
-                ->setFloat("DisplayEntityWidth", $width)
-                ->setFloat("DisplayEntityHeight", $height)
-                ->setFloat("DisplayEntityScale", $scale)
-        );
-        $tile->clearSpawnCompoundCache();
-
-        $packet = BlockActorDataPacket::create(
-            BlockPosition::fromVector3($position),
-            $tile->getSerializedSpawnCompound()
-        );
-        $position->getWorld()->broadcastPacketToViewers($position, $packet);
-
-        return true;
-    }
-
-    public function refreshDisplays(): void
-    {
-        $worldManager = $this->plugin->getServer()->getWorldManager();
-        foreach ($this->definitions as $name => $definition) {
-            $worldName = (string) ($definition["World"] ?? "");
-            $world = $worldManager->getWorldByName($worldName);
-            if ($world === null) {
-                continue;
-            }
-
-            $position = new Position(
-                (float) ($definition["X"] ?? 0),
-                (float) ($definition["Y"] ?? 0),
-                (float) ($definition["Z"] ?? 0),
-                $world
-            );
-            $this->updateDisplay($name, $position);
-        }
+        return CompoundTag::create()
+            ->setString("EntityIdentifier", $identifier)
+            ->setFloat("DisplayEntityWidth", $width)
+            ->setFloat("DisplayEntityHeight", $height)
+            ->setFloat("DisplayEntityScale", $scale);
     }
 
     /** @return array{float,float} */
