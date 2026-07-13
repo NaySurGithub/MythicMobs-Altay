@@ -18,6 +18,7 @@ final class ConfigFormManager
         "Drop Tables" => "DropTables",
         "Spawners" => "Spawners",
         "Models" => "Models",
+        "Cinematics" => "Cinematics",
     ];
 
     public function __construct(private MythicMobs $plugin)
@@ -443,6 +444,15 @@ final class ConfigFormManager
                 "Enabled" => true,
             ],
             "Models" => ["Identifier" => "mythicmobs:new_model"],
+            "Cinematics" => [
+                "Duration" => 100,
+                "Range" => 32,
+                "FreezePlayers" => true,
+                "FreezeCaster" => true,
+                "InvulnerableCaster" => true,
+                "AllowSkip" => true,
+                "Timeline" => [],
+            ],
             default => [],
         };
     }

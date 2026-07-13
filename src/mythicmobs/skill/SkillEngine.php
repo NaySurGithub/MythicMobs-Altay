@@ -253,7 +253,21 @@ final class SkillEngine
             }
             return;
         }
-        if ($targets === [] && in_array($mechanic, ["command", "particles", "effect:particles", "sound", "effect:sound", "animation", "animate"], true)) {
+        if ($targets === [] && in_array($mechanic, [
+            "command",
+            "particles",
+            "effect:particles",
+            "sound",
+            "effect:sound",
+            "animation",
+            "animate",
+            "setphase",
+            "nextphase",
+            "previousphase",
+            "prevphase",
+            "cinematic",
+            "playcinematic",
+        ], true)) {
             $targets = [$caster];
         }
         foreach ($targets as $resolved) {
@@ -1030,6 +1044,42 @@ final class SkillEngine
                 $raw = trim((string) ($params["level"] ?? $params["l"] ?? 1));
                 $level = preg_match('/^[+-]\d+$/', $raw) ? $current + (int) $raw : $this->plugin->getMobManager()->rollLevel($raw, "setlevel mechanic");
                 $this->plugin->getMobManager()->setLevel($target, max(1, $level));
+                break;
+            case "setphase":
+                if ($target instanceof Living) {
+                    $this->plugin->getMobManager()->setPhase(
+                        $target,
+                        (string) (
+                            $params["phase"] ??
+                            $params["p"] ??
+                            $params["name"] ??
+                            ""
+                        )
+                    );
+                }
+                break;
+            case "nextphase":
+                if ($target instanceof Living) {
+                    $this->plugin->getMobManager()->shiftPhase($target, 1);
+                }
+                break;
+            case "previousphase":
+            case "prevphase":
+                if ($target instanceof Living) {
+                    $this->plugin->getMobManager()->shiftPhase($target, -1);
+                }
+                break;
+            case "cinematic":
+            case "playcinematic":
+                $this->plugin->getCinematicManager()->start(
+                    (string) (
+                        $params["name"] ??
+                        $params["cinematic"] ??
+                        $params["c"] ??
+                        ""
+                    ),
+                    $caster
+                );
                 break;
             case "setname":
             case "setdisplayname":

@@ -122,6 +122,8 @@ final class MobManager
             "lastAttack" => 0.0, "spawned" => microtime(true), "lastTarget" => null,
             "stack" => 1,
             "baseName" => $entity->getNameTag(),
+            "baseDefinition" => $runtimeDefinition,
+            "phase" => null,
         ];
         $entity->spawnToAll();
         if (is_array($definition["BossBar"] ?? null)) {
@@ -208,6 +210,7 @@ final class MobManager
     }
     public function forget(Entity $entity): void
     {
+        $this->plugin->getCinematicManager()->stopFor($entity);
         $this->plugin->getBossBarManager()->remove($entity->getId());
         $this->ai->forget($entity->getId());
         unset($this->active[$entity->getId()]);
@@ -477,6 +480,7 @@ final class MobManager
                 continue;
             }
             $data = &$this->active[$id];
+            $this->updatePhase($entity, $data);
             $target = $entity->getTargetEntity();
             if (
                 $target !== null &&
@@ -505,6 +509,258 @@ final class MobManager
             }
             $data["lastTarget"] = $current;
             $this->ai->tick($entity, $data, $target);
+        }
+    }
+
+    public function setPhase(Living $entity, string $phaseName): bool
+    {
+        $id = $entity->getId();
+        if (!isset($this->active[$id])) {
+            return false;
+        }
+        $data = &$this->active[$id];
+        $phases = (array) (
+            $data["baseDefinition"]["Phases"] ?? []
+        );
+        foreach ($phases as $name => $phase) {
+            if (
+                is_array($phase) &&
+                strcasecmp((string) $name, $phaseName) === 0
+            ) {
+                $data["manualPhase"] = true;
+                $this->changePhase($entity, $data, (string) $name, $phase);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function shiftPhase(Living $entity, int $offset): bool
+    {
+        $data = $this->active[$entity->getId()] ?? null;
+        if ($data === null) {
+            return false;
+        }
+        $names = array_keys((array) (
+            $data["baseDefinition"]["Phases"] ?? []
+        ));
+        if ($names === []) {
+            return false;
+        }
+        $current = array_search($data["phase"] ?? null, $names, true);
+        $index = $current === false ? 0 : $current + $offset;
+        $index = max(0, min(count($names) - 1, $index));
+        return $this->setPhase($entity, (string) $names[$index]);
+    }
+
+    /** @param array<string,mixed> $data */
+    private function updatePhase(Living $entity, array &$data): void
+    {
+        $phases = (array) (
+            $data["baseDefinition"]["Phases"] ?? []
+        );
+        if ($phases === [] || (bool) ($data["manualPhase"] ?? false)) {
+            return;
+        }
+        $healthPercent = $entity->getHealth()
+            / max(1.0, (float) $entity->getMaxHealth())
+            * 100.0;
+        $selectedName = null;
+        $selectedPhase = null;
+        foreach ($phases as $name => $phase) {
+            if (!is_array($phase)) {
+                continue;
+            }
+            $range = $phase["HealthRange"] ?? null;
+            if (
+                $range === null &&
+                is_string($phase["Health"] ?? null) &&
+                str_contains((string) $phase["Health"], "%")
+            ) {
+                $range = $phase["Health"];
+            }
+            $healthMatches = $range === null || $this->healthInRange(
+                $healthPercent,
+                (string) $range
+            );
+            $elapsed = microtime(true) - (float) $data["spawned"];
+            $timeMatches = !isset($phase["After"], $phase["AfterTicks"])
+                || $elapsed >= (
+                    isset($phase["AfterTicks"])
+                        ? (float) $phase["AfterTicks"] / 20.0
+                        : (float) $phase["After"]
+                );
+            if ($healthMatches && $timeMatches) {
+                $selectedName = (string) $name;
+                $selectedPhase = $phase;
+            }
+        }
+        if (
+            $selectedName !== null &&
+            $selectedPhase !== null &&
+            ($data["phase"] ?? null) !== $selectedName
+        ) {
+            $this->changePhase(
+                $entity,
+                $data,
+                $selectedName,
+                $selectedPhase
+            );
+        }
+    }
+
+    private function healthInRange(float $health, string $range): bool
+    {
+        if (!preg_match(
+            '/^\s*([0-9.]+)%?\s*(?:-|to)\s*([0-9.]+)%?\s*$/i',
+            $range,
+            $match
+        )) {
+            return false;
+        }
+        $minimum = min((float) $match[1], (float) $match[2]);
+        $maximum = max((float) $match[1], (float) $match[2]);
+        return $health >= $minimum && $health <= $maximum;
+    }
+
+    /** @param array<string,mixed> $data @param array<string,mixed> $phase */
+    private function changePhase(
+        Living $entity,
+        array &$data,
+        string $name,
+        array $phase
+    ): void {
+        $previous = $data["phase"] ?? null;
+        if ($previous !== null) {
+            $previousPhase = (array) (
+                $data["baseDefinition"]["Phases"][$previous] ?? []
+            );
+            $this->plugin->getSkillEngine()->trigger(
+                $entity,
+                "onPhaseExit",
+                $entity,
+                (string) $previous
+            );
+            $onExit = (string) ($previousPhase["OnExit"] ?? "");
+            if ($onExit !== "") {
+                $this->plugin->getSkillEngine()->cast(
+                    $onExit,
+                    $entity,
+                    $entity
+                );
+            }
+        }
+        $base = (array) ($data["baseDefinition"] ?? $data["definition"]);
+        $runtime = array_replace_recursive($base, $phase);
+        unset(
+            $runtime["Phases"],
+            $runtime["HealthRange"],
+            $runtime["OnEnter"],
+            $runtime["OnExit"],
+            $runtime["Cinematic"]
+        );
+        if (
+            is_string($phase["Health"] ?? null) &&
+            str_contains((string) $phase["Health"], "%")
+        ) {
+            $runtime["Health"] = $base["Health"] ?? 20;
+        }
+        if (isset($phase["Skills"])) {
+            $runtime["Skills"] = [
+                ...array_values((array) ($base["Skills"] ?? [])),
+                ...array_values((array) $phase["Skills"]),
+            ];
+        }
+        $data["definition"] = $runtime;
+        $data["phase"] = $name;
+        $data["damage"] = max(
+            0.0,
+            (float) ($phase["Damage"] ?? $data["damage"])
+        );
+        $data["armor"] = max(
+            0.0,
+            (float) ($phase["Armor"] ?? $data["armor"])
+        );
+        $data["power"] = max(
+            0.0,
+            (float) ($phase["Power"] ?? $data["power"])
+        );
+        $phaseHealth = $phase["MaxHealth"] ?? (
+            is_numeric($phase["Health"] ?? null)
+                ? $phase["Health"]
+                : null
+        );
+        if ($phaseHealth !== null) {
+            $ratio = $entity->getHealth()
+                / max(1.0, (float) $entity->getMaxHealth());
+            $maximum = max(1, (int) ceil((float) $phaseHealth));
+            $entity->setMaxHealth($maximum);
+            $entity->setHealth(max(0.01, $maximum * $ratio));
+        }
+        $options = (array) ($runtime["Options"] ?? []);
+        if (isset($options["MovementSpeed"])) {
+            $entity->setMovementSpeed(
+                max(0.0, (float) $options["MovementSpeed"]),
+                true
+            );
+        }
+        if (isset($options["Scale"])) {
+            $entity->setScale(max(0.05, (float) $options["Scale"]));
+        }
+        if (isset($options["KnockbackResistance"])) {
+            $entity->getAttributeMap()
+                ->get(Attribute::KNOCKBACK_RESISTANCE)?->setValue(
+                    max(
+                        0.0,
+                        min(1.0, (float) $options["KnockbackResistance"])
+                    ),
+                    true
+                );
+        }
+        if (isset($phase["Display"])) {
+            $display = str_replace(
+                ["<caster.phase>", "<caster.level>"],
+                [$name, (string) $data["level"]],
+                (string) $phase["Display"]
+            );
+            $data["baseName"] = MythicMobs::color($display);
+            $this->updateStackName($data);
+        }
+        if (is_array($phase["BossBar"] ?? null)) {
+            $this->plugin->getBossBarManager()->remove($entity->getId());
+            $this->plugin->getBossBarManager()->attach(
+                $entity,
+                $phase["BossBar"],
+                $data["key"],
+                (int) $data["level"]
+            );
+        }
+        $this->plugin->getSkillEngine()->trigger(
+            $entity,
+            "onPhaseEnter",
+            $entity,
+            $name
+        );
+        $this->plugin->getSkillEngine()->trigger(
+            $entity,
+            "onPhaseChange",
+            $entity,
+            $name
+        );
+        $onEnter = (string) ($phase["OnEnter"] ?? "");
+        if ($onEnter !== "") {
+            $this->plugin->getSkillEngine()->cast(
+                $onEnter,
+                $entity,
+                $entity
+            );
+        }
+        $cinematic = (string) ($phase["Cinematic"] ?? "");
+        if ($cinematic !== "") {
+            $this->plugin->getCinematicManager()->start(
+                $cinematic,
+                $entity
+            );
         }
     }
 

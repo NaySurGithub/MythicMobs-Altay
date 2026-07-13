@@ -1,0 +1,39 @@
+FinalTransformation:
+  Duration: 100
+  Range: 32
+  FreezePlayers: true
+  FreezeCaster: true
+  InvulnerableCaster: true
+  AllowSkip: true
+  Timeline:
+    0:
+      - Title: '&cFINAL PHASE'
+        Subtitle: '&7The knight reveals its true power'
+        Stay: 40
+      - Animation: transform
+      - Camera:
+          Relative: true
+          X: 0
+          Y: 3
+          Z: -8
+          FaceCaster: true
+          TargetCaster: true
+          Duration: 1.5
+          Ease: in_out_quad
+    25:
+      - Sound: mob.enderdragon.growl
+        Volume: 1
+        Pitch: 1
+      - Camera:
+          Relative: true
+          X: 6
+          Y: 2
+          Z: 0
+          FaceCaster: true
+          Duration: 1
+          Ease: out_cubic
+    60:
+      - Message: '&cYou will not survive!'
+      - Skill: KnightEntrance
+    95:
+      - ClearCamera: true

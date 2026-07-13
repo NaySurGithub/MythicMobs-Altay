@@ -17,6 +17,7 @@ use mythicmobs\entity\CustomEntityManager;
 use mythicmobs\entity\SkeletalKnightEntity;
 use mythicmobs\model\ModelManager;
 use mythicmobs\bossbar\BossBarManager;
+use mythicmobs\cinematic\CinematicManager;
 use pocketmine\block\MonsterSpawner;
 use pocketmine\block\BlockTypeIds;
 use pocketmine\command\Command;
@@ -71,6 +72,7 @@ final class MythicMobs extends PluginBase implements Listener
     private BossBarManager $bossBars;
     private DropManager $drops;
     private ConfigFormManager $configForms;
+    private CinematicManager $cinematics;
     /** @var array<int, array{mob:int,time:float}> */
     private array $lastMobDamager = [];
     /** @var array<string, array<string, mixed>> */
@@ -81,7 +83,7 @@ final class MythicMobs extends PluginBase implements Listener
         $this->saveDefaultConfig();
         $this->saveResource("config-general.yml");
         $this->saveResource("config-mobs.yml");
-        foreach (["Mobs", "Skills", "Items", "DropTables", "Spawners", "Models"] as $directory) {
+        foreach (["Mobs", "Skills", "Items", "DropTables", "Spawners", "Models", "Cinematics"] as $directory) {
             @mkdir($this->getDataFolder() . $directory, 0777, true);
             $this->saveResource($directory . "/Example" . $directory . ".yml");
         }
@@ -89,6 +91,7 @@ final class MythicMobs extends PluginBase implements Listener
         $this->models = new ModelManager($this);
         $this->bossBars = new BossBarManager($this);
         $this->drops = new DropManager($this);
+        $this->cinematics = new CinematicManager($this);
         $this->mobs = new MobManager($this);
         $this->skills = new SkillEngine($this);
         $this->spawners = new SpawnerManager($this);
@@ -99,6 +102,7 @@ final class MythicMobs extends PluginBase implements Listener
             $this->mobs->tick();
             $this->skills->tickTimers();
             $this->bossBars->tick();
+            $this->cinematics->tick();
         }), max(1, (int) $this->general("Configuration.Clock.Main", $this->getConfig()->get("ai-period-ticks", 1))));
         $this->getScheduler()->scheduleRepeatingTask(new ClosureTask(fn () => $this->spawners->tick()), max(1, (int) $this->general("Configuration.Clock.Spawners", $this->getConfig()->get("spawner-period-ticks", 2))));
         $this->getLogger()->info(
@@ -121,6 +125,9 @@ final class MythicMobs extends PluginBase implements Listener
         }
         if (isset($this->mobs)) {
             $this->mobs->removeAll();
+        }
+        if (isset($this->cinematics)) {
+            $this->cinematics->stopAll();
         }
     }
 
@@ -180,6 +187,7 @@ final class MythicMobs extends PluginBase implements Listener
         $this->items = $this->loadDefinitions("Items");
         $this->drops?->reload();
         $this->skills?->reload();
+        $this->cinematics?->reload();
         $this->mobs?->reload();
         $this->spawners?->reload();
         if (isset($this->spawners)) {
@@ -414,6 +422,10 @@ final class MythicMobs extends PluginBase implements Listener
     {
         return $this->drops;
     }
+    public function getCinematicManager(): CinematicManager
+    {
+        return $this->cinematics;
+    }
     public function general(string $path, mixed $default = null): mixed
     {
         return $this->generalConfig->getNested($path, $default);
@@ -430,6 +442,10 @@ final class MythicMobs extends PluginBase implements Listener
     public function onDamage(EntityDamageEvent $event): void
     {
         $victim = $event->getEntity();
+        if ($this->cinematics->isCasterInvulnerable($victim)) {
+            $event->cancel();
+            return;
+        }
         if ($event instanceof EntityDamageByEntityEvent && $event->getCause() === EntityDamageEvent::CAUSE_ENTITY_ATTACK && $event->getDamager() instanceof Player) {
             $this->skills->triggerItem($event->getDamager(), $event->getDamager()->getInventory()->getItemInHand(), "onAttack", $victim);
         }
@@ -555,6 +571,9 @@ final class MythicMobs extends PluginBase implements Listener
     public function onDeath(EntityDeathEvent $event): void
     {
         $entity = $event->getEntity();
+        if ($entity instanceof Player) {
+            $this->cinematics->stopForPlayer($entity);
+        }
         $cause = $entity->getLastDamageCause();
         $killer = $cause instanceof EntityDamageByEntityEvent ? $cause->getDamager() : null;
         if ($killer instanceof Projectile) {
@@ -675,6 +694,19 @@ final class MythicMobs extends PluginBase implements Listener
             $this->sendHelp($sender, (int) ($args[1] ?? 1));
             return true;
         }
+        if ($sub === "skipcinematic" || $sub === "skip") {
+            if (!$sender instanceof Player) {
+                $sender->sendMessage(TextFormat::RED . "In-game only.");
+                return true;
+            }
+            $skipped = $this->cinematics->stopForPlayer($sender, true);
+            $sender->sendMessage(
+                $skipped
+                    ? TextFormat::GREEN . "Cinematic skipped."
+                    : TextFormat::YELLOW . "No skippable cinematic is active."
+            );
+            return true;
+        }
         if (!$sender->hasPermission("mythicmobs.admin")) {
             $sender->sendMessage(TextFormat::RED . "Missing permission mythicmobs.admin");
             return true;
@@ -737,6 +769,31 @@ final class MythicMobs extends PluginBase implements Listener
             }
             return true;
         }
+        if ($sub === "cinematics") {
+            $action = strtolower((string) ($args[1] ?? "list"));
+            if ($action === "play" && $sender instanceof Player) {
+                $name = (string) ($args[2] ?? "");
+                $played = $this->cinematics->start(
+                    $name,
+                    $sender,
+                    [$sender]
+                );
+                $sender->sendMessage(
+                    $played
+                        ? TextFormat::GREEN . "Playing cinematic $name."
+                        : TextFormat::RED . "Unknown cinematic: $name"
+                );
+            } else {
+                $sender->sendMessage(
+                    TextFormat::GOLD . "Cinematics: " .
+                    TextFormat::WHITE . implode(
+                        ", ",
+                        array_keys($this->cinematics->definitions())
+                    )
+                );
+            }
+            return true;
+        }
         if ($sub === "test" && strtolower((string) ($args[1] ?? "")) === "cast") {
             return $this->skillCommand($sender, ["cast", $args[2] ?? ""]);
         }
@@ -765,6 +822,8 @@ final class MythicMobs extends PluginBase implements Listener
                 "/mm skills cast <skill>" => "Cast a configured metaskill.",
                 "/mm models list" => "List all configured models.",
                 "/mm models build" => "Rebuild the model resource pack.",
+                "/mm cinematics list" => "List cinematic sequences.",
+                "/mm cinematics play <name>" => "Preview a cinematic.",
             ],
             3 => [
                 "/mm spawners list" => "List all configured spawners.",

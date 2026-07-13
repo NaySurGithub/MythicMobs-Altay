@@ -62,6 +62,33 @@ SkeletalKnight:
     - message{m="&6<caster.name>&f has awakened!"} @PlayersInRadius{r=20} ~onSpawn
     - skill{s=KnightBash} @target ~onAttack 0.25
     - effect:particles{p=flame;amount=12} @self ~onDamaged <50% 0.3
+  Phases:
+    Armored:
+      HealthRange: 100%-60%
+      Damage: 5
+    Enraged:
+      HealthRange: 60%-25%
+      Damage: 9
+      Options:
+        MovementSpeed: 0.28
+        DamageReach: 3
+      BossBar:
+        Enabled: true
+        Title: '&e<caster.name> &7[Enraged]'
+        Range: 30
+        Color: YELLOW
+        Style: SEGMENTED_10
+      OnEnter: KnightEntrance
+    Final:
+      HealthRange: 25%-0%
+      Display: '&cFinal Skeletal Knight &7<caster.level>'
+      Damage: 14
+      Options:
+        MovementSpeed: 0.32
+        DamageReach: 3.5
+      Cinematic: FinalTransformation
+      Skills:
+        - skill{s=KnightBash} @target ~onAttack 0.4
   Drops:
     - KnightRewards
   DropsPerPlayer: true

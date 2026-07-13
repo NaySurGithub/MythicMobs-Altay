@@ -426,6 +426,60 @@ AITargetSelectors:
 
 ## Skill System
 
+## Boss phases and cinematics
+
+Boss phases can activate from health ranges, elapsed seconds (`After`), elapsed ticks (`AfterTicks`), or the `setphase`, `nextphase`, and `previousphase` mechanics.
+
+```yaml
+Phases:
+  Armored:
+    HealthRange: 100%-60%
+  Enraged:
+    HealthRange: 60%-25%
+    Damage: 9
+    Options:
+      MovementSpeed: 0.28
+      DamageReach: 3
+    OnEnter: EnrageSkill
+  Final:
+    HealthRange: 25%-0%
+    Damage: 14
+    Cinematic: FinalTransformation
+```
+
+Phase overrides support display names, damage, armor, power, options, AI selectors, skills, and boss bars. Skill triggers include `~onPhaseEnter`, `~onPhaseExit`, and `~onPhaseChange`; append a phase name after a colon to filter the trigger.
+
+Cinematics are stored in `Cinematics/*.yml`. Timelines use ticks and support camera movement, actor targeting, animations, named skills, titles, messages, sounds, and camera clearing.
+
+```yaml
+FinalTransformation:
+  Duration: 100
+  Range: 32
+  FreezePlayers: true
+  FreezeCaster: true
+  InvulnerableCaster: true
+  AllowSkip: true
+  Timeline:
+    0:
+      - Animation: transform
+      - Camera:
+          Relative: true
+          X: 0
+          Y: 3
+          Z: -8
+          FaceCaster: true
+          TargetCaster: true
+          Duration: 1.5
+          Ease: in_out_quad
+    60:
+      - Title: '&cFINAL PHASE'
+      - Sound: mob.enderdragon.growl
+    95:
+      - ClearCamera: true
+```
+
+Players can use `/mm skip` when `AllowSkip` is enabled. Operators can preview sequences using `/mm cinematics play <name>`. Camera state is cleared automatically on completion, death, reload, boss removal, or shutdown.
+
 A mob or item skill line uses this general structure:
 
 ```text
@@ -656,6 +710,9 @@ The root command is `/mythicmobs`. Aliases: `/mm`, `/mythic`.
 | `/mm skills cast <skill>` | Cast a metaskill in-game. |
 | `/mm models list` | List loaded models. |
 | `/mm models build` | Rebuild the generated model resource pack. |
+| `/mm cinematics list` | List cinematic sequences. |
+| `/mm cinematics play <name>` | Preview a cinematic sequence. |
+| `/mm skip` | Leave a skippable cinematic. |
 | `/mm spawners list` | List spawner definitions. |
 | `/mm spawners info <name>` | Show a spawner definition. |
 | `/mm spawners create <name> <mob> [seconds] [max]` | Create a spawner at the player. |
