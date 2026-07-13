@@ -83,7 +83,10 @@ final class BossBar
         $this->title = $title;
         foreach ($this->viewers as $player) {
             if ($player->isConnected()) {
-                $player->getNetworkSession()->sendDataPacket(BossEventPacket::title($this->bossId($player), $title));
+                $packet = BossEventPacket::title($this->bossId($player), $title);
+                $player->getNetworkSession()->sendDataPacket(
+                    $this->completePacket($packet, $player)
+                );
             }
         }
         return $this;
@@ -97,7 +100,13 @@ final class BossBar
         $this->percentage = $percentage;
         foreach ($this->viewers as $player) {
             if ($player->isConnected()) {
-                $player->getNetworkSession()->sendDataPacket(BossEventPacket::healthPercent($this->bossId($player), $percentage));
+                $packet = BossEventPacket::healthPercent(
+                    $this->bossId($player),
+                    $percentage
+                );
+                $player->getNetworkSession()->sendDataPacket(
+                    $this->completePacket($packet, $player)
+                );
             }
         }
         return $this;
@@ -108,7 +117,14 @@ final class BossBar
         $this->overlay = $overlay;
         foreach ($this->viewers as $player) {
             if ($player->isConnected()) {
-                $player->getNetworkSession()->sendDataPacket(BossEventPacket::properties($this->bossId($player), $color, $overlay));
+                $packet = BossEventPacket::properties(
+                    $this->bossId($player),
+                    $color,
+                    $overlay
+                );
+                $player->getNetworkSession()->sendDataPacket(
+                    $this->completePacket($packet, $player)
+                );
             }
         }
         return $this;
@@ -121,7 +137,14 @@ final class BossBar
             return;
         }
         $session = $player->getNetworkSession();
-        $session->sendDataPacket(BossEventPacket::show($this->bossId($player), $this->title, $this->percentage, $this->color, $this->overlay));
+        $packet = BossEventPacket::show(
+            $this->bossId($player),
+            $this->title,
+            $this->percentage,
+            $this->color,
+            $this->overlay
+        );
+        $session->sendDataPacket($this->completePacket($packet, $player));
         if ($this->createFog) {
             $session->sendDataPacket(PlayerFogPacket::create([$this->fog]));
         }
@@ -143,7 +166,8 @@ final class BossBar
         }
         if ($player->isConnected()) {
             $session = $player->getNetworkSession();
-            $session->sendDataPacket(BossEventPacket::hide($this->bossId($player)));
+            $packet = BossEventPacket::hide($this->bossId($player));
+            $session->sendDataPacket($this->completePacket($packet, $player));
             if ($this->createFog) {
                 $session->sendDataPacket(PlayerFogPacket::create([]));
             }
@@ -157,6 +181,33 @@ final class BossBar
         }
         unset($this->viewers[$id]);
     }
+
+    private function completePacket(
+        BossEventPacket $packet,
+        Player $player
+    ): BossEventPacket {
+        if (!isset($packet->playerActorUniqueId)) {
+            $packet->playerActorUniqueId = $player->getId();
+        }
+        if (!isset($packet->title)) {
+            $packet->title = $this->title;
+        }
+        if (!isset($packet->filteredTitle)) {
+            $packet->filteredTitle = $this->title;
+        }
+        if (!isset($packet->healthPercent)) {
+            $packet->healthPercent = $this->percentage;
+        }
+        if (!isset($packet->color)) {
+            $packet->color = $this->color;
+        }
+        if (!isset($packet->overlay)) {
+            $packet->overlay = $this->overlay;
+        }
+
+        return $packet;
+    }
+
     /** @param list<Player> $players */
     public function setViewers(array $players): void
     {
