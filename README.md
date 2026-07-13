@@ -406,7 +406,7 @@ AITargetSelectors:
 
 Implemented goal selectors include `meleeattack`, `attack`, `arrowattack`, `rangedattack`, `shootattack`, `movetowardtarget`, `gototarget`, `leapattarget`, `fleeplayers`, `avoidplayers`, `panic`, `followowner`, `opendoors`, `randomstroll`, and `randomwalk`. Ranged attacks spawn real arrows and attribute their damage and skill triggers to the Mythic mob.
 
-Implemented target selectors include `hurtbytarget`, `attacker`, `attackers`, `players`, `nearestplayer`, `monsters`, `nearestmonster`, `otherfactionmonsters`, `specificfactionmonsters`, `specifictargetfaction`, and `specificmob`. Selection respects `Options.FollowRange`, active threat, faction, and selector priority.
+Implemented target selectors include `hurtbytarget`, `attacker`, `attackers`, `players`, `nearestplayer`, `monsters`, `nearestmonster`, `otherfactionmonsters`, `specificfactionmonsters`, `specifictargetfaction`, and `specificmob`. Selection respects `Options.FollowRange`, active threat, faction, and selector priority. Mobs ignore invisible, creative, and spectator players and immediately remove them from threat tables.
 
 ```yaml
 AITargetSelectors:

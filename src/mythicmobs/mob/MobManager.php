@@ -351,7 +351,11 @@ final class MobManager
 
     public function addThreat(Entity $mob, Entity $source, float $amount): void
     {
-        if (!isset($this->active[$mob->getId()]) || $source->isClosed()) {
+        if (
+            !isset($this->active[$mob->getId()]) ||
+            $source->isClosed() ||
+            ($source instanceof Player && !$this->isAggroTarget($source))
+        ) {
             return;
         }
         $id = $mob->getId();
@@ -371,6 +375,7 @@ final class MobManager
             }
             $data = &$this->active[$id];
             $target = $this->selectTarget($entity, $data);
+            $entity->setTargetEntity($target);
             $previous = $data["lastTarget"] ?? null;
             $current = $target?->getId();
             if ($previous === null && $current !== null) {
@@ -392,7 +397,15 @@ final class MobManager
         $follow = max(1.0, (float) ($data["definition"]["Options"]["FollowRange"] ?? 16));
         foreach ($data["threat"] as $id => $threat) {
             $entity = $this->active[$id]["entity"] ?? $this->plugin->getServer()->getWorldManager()->findEntity($id);
-            if ($entity === null || $entity->isClosed() || $entity->getWorld() !== $mob->getWorld() || $entity->getPosition()->distanceSquared($mob->getPosition()) > $follow * $follow) {
+            if (
+                $entity === null ||
+                $entity->isClosed() ||
+                ($entity instanceof Player && !$this->isAggroTarget($entity)) ||
+                $entity->getWorld() !== $mob->getWorld() ||
+                $entity->getPosition()->distanceSquared(
+                    $mob->getPosition()
+                ) > $follow * $follow
+            ) {
                 unset($data["threat"][$id]);
             }
         }
@@ -410,7 +423,16 @@ final class MobManager
             $bestDistance = INF;
             if (in_array($name, ["players","nearestplayer"], true)) {
                 foreach ($this->plugin->getServer()->getOnlinePlayers() as $candidate) {
-                    if (!$candidate->isAlive() || $candidate->getWorld() !== $mob->getWorld() || ($data["faction"] !== "" && $candidate->hasPermission("faction.".$data["faction"]))) {
+                    if (
+                        !$this->isAggroTarget($candidate) ||
+                        $candidate->getWorld() !== $mob->getWorld() ||
+                        (
+                            $data["faction"] !== "" &&
+                            $candidate->hasPermission(
+                                "faction." . $data["faction"]
+                            )
+                        )
+                    ) {
                         continue;
                     }
                     $distance = $candidate->getPosition()->distanceSquared($mob->getPosition());
@@ -449,6 +471,15 @@ final class MobManager
             }
         }
         return null;
+    }
+
+    private function isAggroTarget(Player $player): bool
+    {
+        return $player->isConnected()
+            && $player->isAlive()
+            && !$player->isCreative(true)
+            && !$player->isSpectator()
+            && !$player->isInvisible();
     }
 
     /** @param list<mixed> $lines @return list<array{string,string}> */
