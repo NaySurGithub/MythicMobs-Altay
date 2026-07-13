@@ -86,7 +86,7 @@ final class ConfigFormManager
         foreach ($names as $name) {
             $buttons[] = ["text" => $name];
         }
-        $buttons[] = ["text" => "← Back"];
+        $buttons[] = ["text" => "Back"];
         $player->sendForm(new CallbackForm(
             [
                 "type" => "form",
@@ -242,7 +242,7 @@ final class ConfigFormManager
         foreach ($sections as $section) {
             $buttons[] = ["text" => (string) $section];
         }
-        $buttons[] = ["text" => "← Back"];
+        $buttons[] = ["text" => "Back"];
         $player->sendForm(new CallbackForm(
             [
                 "type" => "form",
