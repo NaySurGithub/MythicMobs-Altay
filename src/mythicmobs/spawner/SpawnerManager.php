@@ -16,6 +16,7 @@ use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\player\Player;
 use pocketmine\world\Position;
+use pocketmine\world\format\Chunk;
 
 final class SpawnerManager
 {
@@ -25,6 +26,9 @@ final class SpawnerManager
     private array $lastSpawn = [];
     /** @var array<string, list<int>> */
     private array $spawned = [];
+    /** @var array<string, true> */
+    private array $persistedDisplays = [];
+    private float $lastDisplayRefresh = 0.0;
 
     public function __construct(private MythicMobs $plugin)
     {
@@ -32,6 +36,7 @@ final class SpawnerManager
     public function reload(): void
     {
         $this->definitions = $this->plugin->loadDefinitions("Spawners");
+        $this->persistedDisplays = [];
     }
     /** @return array<string, array<string, mixed>> */
     public function definitions(): array
@@ -45,6 +50,10 @@ final class SpawnerManager
             return;
         }
         $now = microtime(true);
+        if ($now - $this->lastDisplayRefresh >= 1.0) {
+            $this->refreshDisplays();
+            $this->lastDisplayRefresh = $now;
+        }
         $removedPhysicalSpawner = false;
         foreach ($this->definitions as $name => $definition) {
             if (!(bool) ($definition["Enabled"] ?? true)) {
@@ -219,6 +228,13 @@ final class SpawnerManager
         }
 
         $world = $position->getWorld();
+        $displayKey = $world->getFolderName()
+            . ":"
+            . $position->getFloorX()
+            . ":"
+            . $position->getFloorY()
+            . ":"
+            . $position->getFloorZ();
         if (
             $world->getBlockAt(
                 $position->getFloorX(),
@@ -248,6 +264,20 @@ final class SpawnerManager
 
         $tile->readSaveData($displayData);
         $tile->clearSpawnCompoundCache();
+
+        if (!isset($this->persistedDisplays[$displayKey])) {
+            $chunk = $world->getChunk(
+                $position->getFloorX() >> 4,
+                $position->getFloorZ() >> 4
+            );
+            if ($chunk !== null) {
+                $chunk->setTerrainDirtyFlag(
+                    Chunk::DIRTY_FLAG_BLOCKS,
+                    true
+                );
+                $this->persistedDisplays[$displayKey] = true;
+            }
+        }
 
         $packet = BlockActorDataPacket::create(
             BlockPosition::fromVector3($position),

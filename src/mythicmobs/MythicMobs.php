@@ -1010,10 +1010,24 @@ final class MythicMobs extends PluginBase implements Listener
 
     public function onSpawnerChunkSent(PlayerPostChunkSendEvent $event): void
     {
-        $this->spawners->sendDisplaysInChunk(
-            $event->getPlayer(),
-            $event->getChunkX(),
-            $event->getChunkZ()
+        $player = $event->getPlayer();
+        $chunkX = $event->getChunkX();
+        $chunkZ = $event->getChunkZ();
+        $this->getScheduler()->scheduleDelayedTask(
+            new ClosureTask(
+                function () use ($player, $chunkX, $chunkZ): void {
+                    if (!$player->isConnected()) {
+                        return;
+                    }
+
+                    $this->spawners->sendDisplaysInChunk(
+                        $player,
+                        $chunkX,
+                        $chunkZ
+                    );
+                }
+            ),
+            2
         );
     }
 
