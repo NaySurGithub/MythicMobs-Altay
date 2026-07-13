@@ -85,7 +85,7 @@ final class BossBar
             if ($player->isConnected()) {
                 $packet = BossEventPacket::title($this->bossId($player), $title);
                 $player->getNetworkSession()->sendDataPacket(
-                    $this->completePacket($packet, $player)
+                    $this->completePacket($packet)
                 );
             }
         }
@@ -105,7 +105,7 @@ final class BossBar
                     $percentage
                 );
                 $player->getNetworkSession()->sendDataPacket(
-                    $this->completePacket($packet, $player)
+                    $this->completePacket($packet)
                 );
             }
         }
@@ -123,7 +123,7 @@ final class BossBar
                     $overlay
                 );
                 $player->getNetworkSession()->sendDataPacket(
-                    $this->completePacket($packet, $player)
+                    $this->completePacket($packet)
                 );
             }
         }
@@ -144,7 +144,7 @@ final class BossBar
             $this->color,
             $this->overlay
         );
-        $session->sendDataPacket($this->completePacket($packet, $player));
+        $session->sendDataPacket($this->completePacket($packet));
         if ($this->createFog) {
             $session->sendDataPacket(PlayerFogPacket::create([$this->fog]));
         }
@@ -167,7 +167,7 @@ final class BossBar
         if ($player->isConnected()) {
             $session = $player->getNetworkSession();
             $packet = BossEventPacket::hide($this->bossId($player));
-            $session->sendDataPacket($this->completePacket($packet, $player));
+            $session->sendDataPacket($this->completePacket($packet));
             if ($this->createFog) {
                 $session->sendDataPacket(PlayerFogPacket::create([]));
             }
@@ -182,27 +182,25 @@ final class BossBar
         unset($this->viewers[$id]);
     }
 
-    private function completePacket(
-        BossEventPacket $packet,
-        Player $player
-    ): BossEventPacket {
+    private function completePacket(BossEventPacket $packet): BossEventPacket
+    {
         if (!isset($packet->playerActorUniqueId)) {
-            $packet->playerActorUniqueId = $player->getId();
+            $packet->playerActorUniqueId = 0;
         }
         if (!isset($packet->title)) {
-            $packet->title = $this->title;
+            $packet->title = "";
         }
         if (!isset($packet->filteredTitle)) {
-            $packet->filteredTitle = $this->title;
+            $packet->filteredTitle = "";
         }
         if (!isset($packet->healthPercent)) {
-            $packet->healthPercent = $this->percentage;
+            $packet->healthPercent = 0.0;
         }
         if (!isset($packet->color)) {
-            $packet->color = $this->color;
+            $packet->color = BossBarColor::PINK;
         }
         if (!isset($packet->overlay)) {
-            $packet->overlay = $this->overlay;
+            $packet->overlay = BossBarOverlay::PROGRESS;
         }
 
         return $packet;
