@@ -50,7 +50,7 @@ final class SpawnerManager
             return;
         }
         $now = microtime(true);
-        if ($now - $this->lastDisplayRefresh >= 1.0) {
+        if ($now - $this->lastDisplayRefresh >= 10.0) {
             $this->refreshDisplays();
             $this->lastDisplayRefresh = $now;
         }

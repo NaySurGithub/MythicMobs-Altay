@@ -14,9 +14,12 @@ final class PathNavigator
 {
     /** @var array<int,array{path:list<Vector3>,index:int,goal:string,repath:int}> */
     private array $states = [];
+    /** @var array<int,array{x:float,z:float,stuck:int}> */
+    private array $movement = [];
     private int $tick = 0;
     private int $searchesThisTick = 0;
-    private const MAX_SEARCHES_PER_TICK = 4;
+    private const MAX_SEARCHES_PER_TICK = 2;
+    private const MAX_VISITED_NODES = 384;
 
     public function tick(): void
     {
@@ -26,6 +29,7 @@ final class PathNavigator
     public function clear(int $entityId): void
     {
         unset($this->states[$entityId]);
+        unset($this->movement[$entityId]);
     }
 
     public function move(
@@ -87,6 +91,21 @@ final class PathNavigator
         }
         $delta = $waypoint->subtractVector($entity->getPosition());
         $horizontal = sqrt($delta->x ** 2 + $delta->z ** 2);
+        $position = $entity->getPosition();
+        $movement = $this->movement[$id] ?? null;
+        $stuck = 0;
+        if ($movement !== null && $horizontal > 0.2) {
+            $moved = ($position->x - $movement["x"]) ** 2
+                + ($position->z - $movement["z"]) ** 2;
+            $stuck = $moved < 0.0004
+                ? $movement["stuck"] + 1
+                : 0;
+        }
+        $this->movement[$id] = [
+            "x" => $position->x,
+            "z" => $position->z,
+            "stuck" => $stuck,
+        ];
         $vertical = $entity->getMotion()->y;
         $currentBlock = $entity->getWorld()->getBlockAt(
             $entity->getPosition()->getFloorX(),
@@ -103,9 +122,10 @@ final class PathNavigator
             $vertical = $delta->y >= 0 ? 0.2 : -0.15;
         }
         if (
-            $entity->isOnGround() &&
+            $this->isGrounded($entity) &&
             (
                 $delta->y > 0.35 ||
+                $stuck >= 2 ||
                 $this->hasOneBlockObstacle($entity, $delta)
             )
         ) {
@@ -128,21 +148,40 @@ final class PathNavigator
             return false;
         }
 
-        $ahead = $entity->getPosition()->addVector(
-            $horizontal->normalize()->multiply(0.7)
-        );
+        $direction = $horizontal->normalize();
         $world = $entity->getWorld();
-        $x = $ahead->getFloorX();
         $y = $entity->getPosition()->getFloorY();
-        $z = $ahead->getFloorZ();
-        $feetBlocked = $world->getBlockAt($x, $y, $z)
-            ->getCollisionBoxes() !== [];
-        $headClear = $world->getBlockAt($x, $y + 1, $z)
-            ->getCollisionBoxes() === [];
-        $aboveClear = $world->getBlockAt($x, $y + 2, $z)
-            ->getCollisionBoxes() === [];
+        foreach ([0.55, 0.9] as $distance) {
+            $ahead = $entity->getPosition()->addVector(
+                $direction->multiply($distance)
+            );
+            $x = $ahead->getFloorX();
+            $z = $ahead->getFloorZ();
+            $feetBlocked = $world->getBlockAt($x, $y, $z)
+                ->getCollisionBoxes() !== [];
+            $headClear = $world->getBlockAt($x, $y + 1, $z)
+                ->getCollisionBoxes() === [];
+            $aboveClear = $world->getBlockAt($x, $y + 2, $z)
+                ->getCollisionBoxes() === [];
+            if ($feetBlocked && $headClear && $aboveClear) {
+                return true;
+            }
+        }
 
-        return $feetBlocked && $headClear && $aboveClear;
+        return false;
+    }
+
+    private function isGrounded(Living $entity): bool
+    {
+        if ($entity->isOnGround()) {
+            return true;
+        }
+        $position = $entity->getPosition();
+        return $entity->getWorld()->getBlockAt(
+            $position->getFloorX(),
+            $position->getFloorY() - 1,
+            $position->getFloorZ()
+        )->getCollisionBoxes() !== [] && abs($entity->getMotion()->y) < 0.08;
     }
 
     /** @return list<Vector3> */
@@ -169,7 +208,16 @@ final class PathNavigator
         $cost = [$startKey => 0.0];
         $came = [];
         $nodes = [];
-        for ($visited = 0; !$open->isEmpty() && $visited < 768; ++$visited) {
+        $walkableCache = [];
+        $verticalSteps = [0, 1];
+        for ($fall = 1; $fall <= $maxFallDistance; ++$fall) {
+            $verticalSteps[] = -$fall;
+        }
+        for (
+            $visited = 0;
+            !$open->isEmpty() && $visited < self::MAX_VISITED_NODES;
+            ++$visited
+        ) {
             $current = $open->extract()["data"];
             [$x, $y, $z] = $current;
             $key = "$x:$y:$z";
@@ -179,10 +227,6 @@ final class PathNavigator
             }
             $neighbors = [[1, 0], [-1, 0], [0, 1], [0, -1]];
             foreach ($neighbors as [$dx, $dz]) {
-                $verticalSteps = [0, 1];
-                for ($fall = 1; $fall <= $maxFallDistance; ++$fall) {
-                    $verticalSteps[] = -$fall;
-                }
                 foreach ($verticalSteps as $dy) {
                     $nx = $x + $dx;
                     $ny = $y + $dy;
@@ -195,7 +239,8 @@ final class PathNavigator
                         $doors,
                         $canSwim,
                         $canClimb,
-                        $avoidHazards
+                        $avoidHazards,
+                        $walkableCache
                     )) {
                         continue;
                     }
@@ -227,7 +272,8 @@ final class PathNavigator
                         $doors,
                         $canSwim,
                         $canClimb,
-                        $avoidHazards
+                        $avoidHazards,
+                        $walkableCache
                     )) {
                         continue;
                     }
@@ -257,10 +303,15 @@ final class PathNavigator
         bool $doors,
         bool $canSwim,
         bool $canClimb,
-        bool $avoidHazards
+        bool $avoidHazards,
+        array &$cache
     ): bool {
+        $cacheKey = "$x:$y:$z";
+        if (isset($cache[$cacheKey])) {
+            return $cache[$cacheKey];
+        }
         if (!$world->isChunkLoaded($x >> 4, $z >> 4)) {
-            return false;
+            return $cache[$cacheKey] = false;
         }
         $feet = $world->getBlockAt($x, $y, $z);
         $head = $world->getBlockAt($x, $y + 1, $z);
@@ -273,7 +324,7 @@ final class PathNavigator
                 $this->isHazard($floor->getTypeId())
             )
         ) {
-            return false;
+            return $cache[$cacheKey] = false;
         }
         if (
             $canSwim &&
@@ -282,7 +333,7 @@ final class PathNavigator
                 $this->isWater($head->getTypeId())
             )
         ) {
-            return true;
+            return $cache[$cacheKey] = true;
         }
         if (
             $canClimb &&
@@ -291,11 +342,13 @@ final class PathNavigator
                 $this->isClimbable($head->getTypeId())
             )
         ) {
-            return true;
+            return $cache[$cacheKey] = true;
         }
         $feetPass = $feet->getCollisionBoxes() === [] || ($doors && $feet instanceof Door);
         $headPass = $head->getCollisionBoxes() === [] || ($doors && $head instanceof Door);
-        return $feetPass && $headPass && $floor->getCollisionBoxes() !== [];
+        return $cache[$cacheKey] = $feetPass &&
+            $headPass &&
+            $floor->getCollisionBoxes() !== [];
     }
 
     private function isWater(int $typeId): bool

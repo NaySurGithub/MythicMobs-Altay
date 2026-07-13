@@ -31,6 +31,9 @@ final class MobManager
     private array $active = [];
     /** @var array<string,true> */
     private array $invalidLevelWarnings = [];
+    /** @var array<string,list<array{string,string}>> */
+    private array $targetSelectorCache = [];
+    private int $aiTick = 0;
     private AiController $ai;
 
     public function __construct(private MythicMobs $plugin)
@@ -42,6 +45,7 @@ final class MobManager
     {
         $this->definitions = $this->plugin->loadDefinitions("Mobs");
         $this->invalidLevelWarnings = [];
+        $this->targetSelectorCache = [];
     }
     /** @return array<string, array<string, mixed>> */
     public function definitions(): array
@@ -461,6 +465,7 @@ final class MobManager
 
     public function tick(): void
     {
+        ++$this->aiTick;
         $this->ai->beginTick();
         foreach (array_keys($this->active) as $id) {
             $entity = $this->active[$id]["entity"];
@@ -470,7 +475,21 @@ final class MobManager
                 continue;
             }
             $data = &$this->active[$id];
-            $target = $this->selectTarget($entity, $data);
+            $target = $entity->getTargetEntity();
+            if (
+                $target !== null &&
+                (
+                    $target->isClosed() ||
+                    !$target->isAlive() ||
+                    $target->getWorld() !== $entity->getWorld() ||
+                    ($target instanceof Player && !$this->isAggroTarget($target))
+                )
+            ) {
+                $target = null;
+            }
+            if (($this->aiTick + $id) % 5 === 0) {
+                $target = $this->selectTarget($entity, $data);
+            }
             $entity->setTargetEntity($target);
             $previous = $data["lastTarget"] ?? null;
             $current = $target?->getId();
@@ -581,6 +600,10 @@ final class MobManager
     /** @param list<mixed> $lines @return list<array{string,string}> */
     private function targetSelectors(array $lines): array
     {
+        $cacheKey = md5(serialize($lines));
+        if (isset($this->targetSelectorCache[$cacheKey])) {
+            return $this->targetSelectorCache[$cacheKey];
+        }
         $result = [];
         $order = 0;
         foreach ($lines as $line) {
@@ -601,7 +624,10 @@ final class MobManager
             $result[] = ["priority" => $priority,"order" => $order++,"name" => $name,"argument" => $argument];
         }
         usort($result, fn (array $a, array $b) => [$a["priority"],$a["order"]] <=> [$b["priority"],$b["order"]]);
-        return array_map(fn (array $entry) => [$entry["name"],$entry["argument"]], $result);
+        return $this->targetSelectorCache[$cacheKey] = array_map(
+            fn (array $entry) => [$entry["name"], $entry["argument"]],
+            $result
+        );
     }
 
     public function applyDamageModifier(EntityDamageEvent $event): void

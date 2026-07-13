@@ -17,6 +17,8 @@ final class AiController
     private PathNavigator $navigator;
     /** @var array<int,array{destination:Vector3,until:int}> */
     private array $wander = [];
+    /** @var array<string,array<string,array<string,string>>> */
+    private array $goalCache = [];
     private int $tick = 0;
 
     public function __construct()
@@ -138,6 +140,10 @@ final class AiController
     /** @param list<mixed> $lines @return array<string,array<string,string>> */
     private function goals(array $lines): array
     {
+        $cacheKey = md5(serialize($lines));
+        if (isset($this->goalCache[$cacheKey])) {
+            return $this->goalCache[$cacheKey];
+        }
         $result = [];
         $order = 0;
         foreach ($lines as $line) {
@@ -169,7 +175,7 @@ final class AiController
             }
             $result[$name] = $params;
         }
-        return $result;
+        return $this->goalCache[$cacheKey] = $result;
     }
 
     /** @param array<string,array<string,string>> $goals @param list<string> $names */
