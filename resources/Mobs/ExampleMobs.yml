@@ -9,7 +9,6 @@ UndeadWarriorTemplate:
 
 SkeletalKnight:
   Template: UndeadWarriorTemplate
-  NetworkType: mythicmobs:skeletal_knight
   Display: '&6Skeletal Knight &7<caster.level>'
   Level: 3to7
   Health: 40
