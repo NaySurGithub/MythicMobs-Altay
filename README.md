@@ -635,6 +635,7 @@ The root command is `/mythicmobs`. Aliases: `/mm`, `/mythic`.
 | `/mm help [page]` | Show the paginated command help. |
 | `/mm version` | Show plugin and API version information. |
 | `/mm reload` | Reload configurations and definitions. |
+| `/mm config` | Open the operator configuration dashboard. |
 | `/mm debug <level>` | Set the persisted debug level. |
 | `/mm debugmode <true\|false>` | Toggle debug mode. |
 | `/mm save` | Save runtime spawner state. |

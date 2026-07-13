@@ -8,6 +8,7 @@ use mythicmobs\drop\DropManager;
 use mythicmobs\mob\MobManager;
 use mythicmobs\skill\SkillEngine;
 use mythicmobs\spawner\SpawnerManager;
+use mythicmobs\ui\ConfigFormManager;
 use mythicmobs\entity\MythicSquid;
 use mythicmobs\entity\MythicSkeleton;
 use mythicmobs\entity\MythicVillager;
@@ -69,6 +70,7 @@ final class MythicMobs extends PluginBase implements Listener
     private ModelManager $models;
     private BossBarManager $bossBars;
     private DropManager $drops;
+    private ConfigFormManager $configForms;
     /** @var array<int, array{mob:int,time:float}> */
     private array $lastMobDamager = [];
     /** @var array<string, array<string, mixed>> */
@@ -90,6 +92,7 @@ final class MythicMobs extends PluginBase implements Listener
         $this->mobs = new MobManager($this);
         $this->skills = new SkillEngine($this);
         $this->spawners = new SpawnerManager($this);
+        $this->configForms = new ConfigFormManager($this);
         $this->reloadMythic();
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
         $this->getScheduler()->scheduleRepeatingTask(new ClosureTask(function (): void {
@@ -670,6 +673,14 @@ final class MythicMobs extends PluginBase implements Listener
             $sender->sendMessage(TextFormat::GREEN . "MythicMobs configurations reloaded.");
             return true;
         }
+        if ($sub === "config") {
+            if (!$sender instanceof Player) {
+                $sender->sendMessage(TextFormat::RED . "In-game only.");
+                return true;
+            }
+            $this->configForms->open($sender);
+            return true;
+        }
         if ($sub === "version") {
             $sender->sendMessage(TextFormat::GOLD . "MythicMobs " . $this->getDescription()->getVersion() . TextFormat::GRAY . " for Altay API 5");
             return true;
@@ -754,6 +765,7 @@ final class MythicMobs extends PluginBase implements Listener
                 "/mm spawners delete <name>" => "Delete a runtime spawner.",
             ],
             4 => [
+                "/mm config" => "Open the complete configuration forms.",
                 "/mm reload" => "Reload all MythicMobs files.",
                 "/mm save" => "Save runtime spawner state.",
                 "/mm debug <level>" => "Set the debug level.",
