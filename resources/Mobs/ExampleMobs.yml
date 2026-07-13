@@ -41,6 +41,10 @@ SkeletalKnight:
     - 2 players
   Options:
     MovementSpeed: 0.23
+    CanSwim: true
+    CanClimb: true
+    MaxFallDistance: 3
+    AvoidHazards: true
     FollowRange: 18
     AlwaysShowName: true
     KnockbackResistance: 0.25

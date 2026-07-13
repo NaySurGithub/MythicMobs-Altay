@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace mythicmobs\ai;
 
 use pocketmine\block\Door;
+use pocketmine\block\BlockTypeIds;
 use pocketmine\entity\Living;
 use pocketmine\math\Vector3;
 use pocketmine\world\World;
@@ -27,25 +28,56 @@ final class PathNavigator
         unset($this->states[$entityId]);
     }
 
-    public function move(Living $entity, Vector3 $goal, float $speed, bool $openDoors = false): void
-    {
+    public function move(
+        Living $entity,
+        Vector3 $goal,
+        float $speed,
+        bool $openDoors = false,
+        bool $canSwim = true,
+        bool $canClimb = true,
+        int $maxFallDistance = 3,
+        bool $avoidHazards = true
+    ): void {
         $id = $entity->getId();
         $goalKey = $goal->getFloorX() . ":" . $goal->getFloorY() . ":" . $goal->getFloorZ();
         $state = $this->states[$id] ?? null;
         if ($state === null || $state["goal"] !== $goalKey || $state["index"] >= count($state["path"]) || $this->tick >= $state["repath"]) {
             $path = $state["path"] ?? [];
+            $searched = false;
             if ($this->searchesThisTick < self::MAX_SEARCHES_PER_TICK) {
                 ++$this->searchesThisTick;
-                $path = $this->findPath($entity->getWorld(), $entity->getPosition(), $goal, $openDoors);
+                $searched = true;
+                $path = $this->findPath(
+                    $entity->getWorld(),
+                    $entity->getPosition(),
+                    $goal,
+                    $openDoors,
+                    $canSwim,
+                    $canClimb,
+                    $maxFallDistance,
+                    $avoidHazards
+                );
             }
-            $state = ["path" => $path, "index" => 0, "goal" => $goalKey, "repath" => $this->tick + 10];
+            $state = [
+                "path" => $path,
+                "index" => 0,
+                "goal" => $goalKey,
+                "repath" => $this->tick + ($searched ? 10 : 1),
+            ];
             $this->states[$id] = $state;
         }
-        $waypoint = $state["path"][$state["index"]] ?? $goal;
+        $waypoint = $state["path"][$state["index"]] ?? null;
+        if ($waypoint === null) {
+            $entity->setMotion(new Vector3(0, $entity->getMotion()->y, 0));
+            return;
+        }
         if ($entity->getPosition()->distanceSquared($waypoint) < 0.5) {
             ++$state["index"];
             $this->states[$id] = $state;
-            $waypoint = $state["path"][$state["index"]] ?? $goal;
+            $waypoint = $state["path"][$state["index"]] ?? null;
+            if ($waypoint === null) {
+                return;
+            }
         }
         if ($openDoors) {
             $block = $entity->getWorld()->getBlockAt($waypoint->getFloorX(), $waypoint->getFloorY(), $waypoint->getFloorZ());
@@ -55,10 +87,21 @@ final class PathNavigator
         }
         $delta = $waypoint->subtractVector($entity->getPosition());
         $horizontal = sqrt($delta->x ** 2 + $delta->z ** 2);
-        if ($horizontal < 0.001) {
-            return;
-        }
         $vertical = $entity->getMotion()->y;
+        $currentBlock = $entity->getWorld()->getBlockAt(
+            $entity->getPosition()->getFloorX(),
+            $entity->getPosition()->getFloorY(),
+            $entity->getPosition()->getFloorZ()
+        );
+        if ($canSwim && $this->isWater($currentBlock->getTypeId())) {
+            $vertical = max(-0.18, min(0.22, $delta->y * 0.25));
+            $speed *= 0.8;
+        } elseif (
+            $canClimb &&
+            $this->isClimbable($currentBlock->getTypeId())
+        ) {
+            $vertical = $delta->y >= 0 ? 0.2 : -0.15;
+        }
         if (
             $entity->isOnGround() &&
             (
@@ -67,6 +110,10 @@ final class PathNavigator
             )
         ) {
             $vertical = 0.42;
+        }
+        if ($horizontal < 0.001) {
+            $entity->setMotion(new Vector3(0, $vertical, 0));
+            return;
         }
         $entity->setMotion(new Vector3($delta->x / $horizontal * $speed, $vertical, $delta->z / $horizontal * $speed));
         $entity->lookAt($waypoint->add(0, 1, 0));
@@ -99,8 +146,16 @@ final class PathNavigator
     }
 
     /** @return list<Vector3> */
-    private function findPath(World $world, Vector3 $start, Vector3 $goal, bool $doors): array
-    {
+    private function findPath(
+        World $world,
+        Vector3 $start,
+        Vector3 $goal,
+        bool $doors,
+        bool $canSwim,
+        bool $canClimb,
+        int $maxFallDistance,
+        bool $avoidHazards
+    ): array {
         $sx = $start->getFloorX();
         $sy = $start->getFloorY();
         $sz = $start->getFloorZ();
@@ -114,7 +169,7 @@ final class PathNavigator
         $cost = [$startKey => 0.0];
         $came = [];
         $nodes = [];
-        for ($visited = 0; !$open->isEmpty() && $visited < 384; ++$visited) {
+        for ($visited = 0; !$open->isEmpty() && $visited < 768; ++$visited) {
             $current = $open->extract()["data"];
             [$x, $y, $z] = $current;
             $key = "$x:$y:$z";
@@ -122,12 +177,26 @@ final class PathNavigator
             if (abs($x - $gx) + abs($z - $gz) <= 1 && abs($y - $gy) <= 2) {
                 return $this->reconstruct($came, $nodes, $key);
             }
-            foreach ([[1,0],[-1,0],[0,1],[0,-1]] as [$dx,$dz]) {
-                foreach ([0,1,-1] as $dy) {
+            $neighbors = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            foreach ($neighbors as [$dx, $dz]) {
+                $verticalSteps = [0, 1];
+                for ($fall = 1; $fall <= $maxFallDistance; ++$fall) {
+                    $verticalSteps[] = -$fall;
+                }
+                foreach ($verticalSteps as $dy) {
                     $nx = $x + $dx;
                     $ny = $y + $dy;
                     $nz = $z + $dz;
-                    if (!$this->walkable($world, $nx, $ny, $nz, $doors)) {
+                    if (!$this->walkable(
+                        $world,
+                        $nx,
+                        $ny,
+                        $nz,
+                        $doors,
+                        $canSwim,
+                        $canClimb,
+                        $avoidHazards
+                    )) {
                         continue;
                     }
                     $next = "$nx:$ny:$nz";
@@ -143,21 +212,118 @@ final class PathNavigator
                     break;
                 }
             }
+            $currentType = $world->getBlockAt($x, $y, $z)->getTypeId();
+            if (
+                ($canSwim && $this->isWater($currentType)) ||
+                ($canClimb && $this->isClimbable($currentType))
+            ) {
+                foreach ([1, -1] as $dy) {
+                    $ny = $y + $dy;
+                    if (!$this->walkable(
+                        $world,
+                        $x,
+                        $ny,
+                        $z,
+                        $doors,
+                        $canSwim,
+                        $canClimb,
+                        $avoidHazards
+                    )) {
+                        continue;
+                    }
+                    $next = "$x:$ny:$z";
+                    $new = ($cost[$key] ?? 0) + 1.2;
+                    if ($new >= ($cost[$next] ?? INF)) {
+                        continue;
+                    }
+                    $cost[$next] = $new;
+                    $came[$next] = $key;
+                    $nodes[$next] = [$x, $ny, $z];
+                    $heuristic = abs($x - $gx)
+                        + abs($z - $gz)
+                        + abs($ny - $gy) * 0.5;
+                    $open->insert([$x, $ny, $z], -($new + $heuristic));
+                }
+            }
         }
         return [];
     }
 
-    private function walkable(World $world, int $x, int $y, int $z, bool $doors): bool
-    {
+    private function walkable(
+        World $world,
+        int $x,
+        int $y,
+        int $z,
+        bool $doors,
+        bool $canSwim,
+        bool $canClimb,
+        bool $avoidHazards
+    ): bool {
         if (!$world->isChunkLoaded($x >> 4, $z >> 4)) {
             return false;
         }
         $feet = $world->getBlockAt($x, $y, $z);
         $head = $world->getBlockAt($x, $y + 1, $z);
         $floor = $world->getBlockAt($x, $y - 1, $z);
+        if (
+            $avoidHazards &&
+            (
+                $this->isHazard($feet->getTypeId()) ||
+                $this->isHazard($head->getTypeId()) ||
+                $this->isHazard($floor->getTypeId())
+            )
+        ) {
+            return false;
+        }
+        if (
+            $canSwim &&
+            (
+                $this->isWater($feet->getTypeId()) ||
+                $this->isWater($head->getTypeId())
+            )
+        ) {
+            return true;
+        }
+        if (
+            $canClimb &&
+            (
+                $this->isClimbable($feet->getTypeId()) ||
+                $this->isClimbable($head->getTypeId())
+            )
+        ) {
+            return true;
+        }
         $feetPass = $feet->getCollisionBoxes() === [] || ($doors && $feet instanceof Door);
         $headPass = $head->getCollisionBoxes() === [] || ($doors && $head instanceof Door);
         return $feetPass && $headPass && $floor->getCollisionBoxes() !== [];
+    }
+
+    private function isWater(int $typeId): bool
+    {
+        return $typeId === BlockTypeIds::WATER;
+    }
+
+    private function isClimbable(int $typeId): bool
+    {
+        return $typeId === BlockTypeIds::LADDER ||
+            $typeId === BlockTypeIds::VINES;
+    }
+
+    private function isHazard(int $typeId): bool
+    {
+        return in_array(
+            $typeId,
+            [
+                BlockTypeIds::LAVA,
+                BlockTypeIds::FIRE,
+                BlockTypeIds::SOUL_FIRE,
+                BlockTypeIds::CACTUS,
+                BlockTypeIds::MAGMA,
+                BlockTypeIds::SWEET_BERRY_BUSH,
+                BlockTypeIds::CAMPFIRE,
+            ],
+            true
+        );
     }
 
     /** @param array<string,string> $came @param array<string,array{int,int,int}> $nodes @return list<Vector3> */

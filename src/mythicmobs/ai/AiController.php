@@ -41,6 +41,32 @@ final class AiController
         $options = (array) ($data["definition"]["Options"] ?? []);
         $speed = max(0.03, min(0.6, (float) ($options["MovementSpeed"] ?? 0.2)));
         $openDoors = isset($goals["opendoors"]);
+        $canSwim = (bool) ($options["CanSwim"] ?? true);
+        $canClimb = (bool) ($options["CanClimb"] ?? true);
+        $maxFallDistance = max(
+            0,
+            min(8, (int) ($options["MaxFallDistance"] ?? 3))
+        );
+        $avoidHazards = (bool) ($options["AvoidHazards"] ?? true);
+        $move = function (Vector3 $goal, float $moveSpeed) use (
+            $mob,
+            $openDoors,
+            $canSwim,
+            $canClimb,
+            $maxFallDistance,
+            $avoidHazards
+        ): void {
+            $this->navigator->move(
+                $mob,
+                $goal,
+                $moveSpeed,
+                $openDoors,
+                $canSwim,
+                $canClimb,
+                $maxFallDistance,
+                $avoidHazards
+            );
+        };
         if ($target !== null && !$target->isClosed()) {
             $mob->setTargetEntity($target);
             $distance = $mob->getPosition()->distanceSquared($target->getPosition());
@@ -58,14 +84,14 @@ final class AiController
             ]);
             if (in_array($combat, ["fleeplayers", "avoidplayers", "panic"], true)) {
                 $away = $mob->getPosition()->subtractVector($target->getPosition())->normalize()->multiply(8);
-                $this->navigator->move($mob, $mob->getPosition()->addVector($away), $speed * 1.2, $openDoors);
+                $move($mob->getPosition()->addVector($away), $speed * 1.2);
                 return;
             }
             if (in_array($combat, ["arrowattack", "rangedattack", "shootattack"], true)) {
                 $params = $goals[$combat];
                 $range = max(4.0, (float)($params["range"] ?? 16));
                 if ($distance > $range * $range * 0.7) {
-                    $this->navigator->move($mob, $target->getPosition(), $speed, $openDoors);
+                    $move($target->getPosition(), $speed);
                 } else {
                     $mob->lookAt($target->getEyePos());
                 }
@@ -80,7 +106,7 @@ final class AiController
                 $mob->setMotion(new Vector3($direction->x * 0.45, 0.42, $direction->z * 0.45));
             }
             if ($distance > 6.25) {
-                $this->navigator->move($mob, $target->getPosition(), $speed, $openDoors);
+                $move($target->getPosition(), $speed);
             } elseif (in_array($combat, ["meleeattack", "attack"], true) && microtime(true) - $data["lastAttack"] >= max(0.25, (float)($goals[$combat]["interval"] ?? 1))) {
                 $data["lastAttack"] = microtime(true);
                 $target->attack(new EntityDamageByEntityEvent($mob, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, $data["damage"]));
@@ -88,7 +114,7 @@ final class AiController
             return;
         }
         if (isset($goals["followowner"]) && ($owner = $mob->getOwningEntity()) !== null) {
-            $this->navigator->move($mob, $owner->getPosition(), $speed, $openDoors);
+            $move($owner->getPosition(), $speed);
             return;
         }
         if (isset($goals["randomstroll"]) || isset($goals["randomwalk"])) {
@@ -105,7 +131,7 @@ final class AiController
                 ];
                 $this->wander[$mob->getId()] = $state;
             }
-            $this->navigator->move($mob, $state["destination"], $speed * 0.65, $openDoors);
+            $move($state["destination"], $speed * 0.65);
         }
     }
 

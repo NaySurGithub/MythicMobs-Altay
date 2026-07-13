@@ -386,7 +386,7 @@ Boss bars automatically follow health, update level placeholders, reconcile near
 
 ## Pathfinding and AI goals
 
-Mobs use a bounded A* navigator instead of straight-line pursuit. It searches walkable blocks, handles one-block elevation changes, caches routes, repaths moving targets, can open doors, and limits new searches per tick for low-tier servers.
+Mobs use a bounded A* navigator instead of straight-line pursuit. It handles jumping, safe drops, swimming, ladders, vines, doors, and hazard avoidance. Routes are cached and moving targets are repathed with a per-tick search budget for low-tier servers.
 
 Goal and target selectors accept optional numeric priorities. Lower numbers run first. `clear` removes inherited/default selectors.
 
@@ -402,6 +402,12 @@ AITargetSelectors:
   - clear
   - 1 hurtbytarget
   - 2 players
+
+Options:
+  CanSwim: true
+  CanClimb: true
+  MaxFallDistance: 3
+  AvoidHazards: true
 ```
 
 Implemented goal selectors include `meleeattack`, `attack`, `arrowattack`, `rangedattack`, `shootattack`, `movetowardtarget`, `gototarget`, `leapattarget`, `fleeplayers`, `avoidplayers`, `panic`, `followowner`, `opendoors`, `randomstroll`, and `randomwalk`. Ranged attacks spawn real arrows and attribute their damage and skill triggers to the Mythic mob.
