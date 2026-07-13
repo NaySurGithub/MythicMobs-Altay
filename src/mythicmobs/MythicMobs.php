@@ -162,6 +162,17 @@ final class MythicMobs extends PluginBase implements Listener
             );
             $mobConfigChanged = true;
         }
+        if (
+            $this->mobConfig->getNested(
+                "Configuration.DefaultMobOptions.DamageReach"
+            ) === null
+        ) {
+            $this->mobConfig->setNested(
+                "Configuration.DefaultMobOptions.DamageReach",
+                2.5
+            );
+            $mobConfigChanged = true;
+        }
         if ($mobConfigChanged) {
             $this->mobConfig->save();
         }

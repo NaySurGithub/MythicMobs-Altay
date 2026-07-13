@@ -107,7 +107,23 @@ final class AiController
                 $direction = $target->getPosition()->subtractVector($mob->getPosition())->normalize();
                 $mob->setMotion(new Vector3($direction->x * 0.45, 0.42, $direction->z * 0.45));
             }
-            if ($distance > 6.25) {
+            $combatOptions = $combat !== null
+                ? ($goals[$combat] ?? [])
+                : [];
+            $damageReach = max(
+                0.5,
+                min(
+                    16.0,
+                    (float) (
+                        $combatOptions["reach"] ??
+                        $combatOptions["damagereach"] ??
+                        $options["DamageReach"] ??
+                        $options["AttackReach"] ??
+                        2.5
+                    )
+                )
+            );
+            if ($distance > $damageReach * $damageReach) {
                 $move($target->getPosition(), $speed);
             } elseif (in_array($combat, ["meleeattack", "attack"], true) && microtime(true) - $data["lastAttack"] >= max(0.25, (float)($goals[$combat]["interval"] ?? 1))) {
                 $data["lastAttack"] = microtime(true);

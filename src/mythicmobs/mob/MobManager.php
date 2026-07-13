@@ -112,9 +112,11 @@ final class MobManager
                     break;
             }
         }
+        $runtimeDefinition = $definition;
+        $runtimeDefinition["Options"] = $options;
         $this->active[$entity->getId()] = [
             "entity" => $entity,
-            "key" => $key, "definition" => $definition, "level" => $level,
+            "key" => $key, "definition" => $runtimeDefinition, "level" => $level,
             "damage" => $damage, "armor" => $armor, "power" => $power,
             "faction" => $faction, "threat" => [],
             "lastAttack" => 0.0, "spawned" => microtime(true), "lastTarget" => null,

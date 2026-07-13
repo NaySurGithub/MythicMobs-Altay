@@ -406,9 +406,12 @@ AITargetSelectors:
 Options:
   CanSwim: true
   CanClimb: true
+  DamageReach: 2.5
   MaxFallDistance: 3
   AvoidHazards: true
 ```
+
+`Options.DamageReach` controls melee range in blocks. Override it for one goal with `meleeattack{reach=3.5;interval=1}`.
 
 Implemented goal selectors include `meleeattack`, `attack`, `arrowattack`, `rangedattack`, `shootattack`, `movetowardtarget`, `gototarget`, `leapattarget`, `fleeplayers`, `avoidplayers`, `panic`, `followowner`, `opendoors`, `randomstroll`, and `randomwalk`. Ranged attacks spawn real arrows and attribute their damage and skill triggers to the Mythic mob.
 
