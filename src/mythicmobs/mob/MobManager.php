@@ -27,7 +27,7 @@ final class MobManager
 {
     /** @var array<string, array<string, mixed>> */
     private array $definitions = [];
-    /** @var array<int, array{entity:Living, key:string, definition:array<string,mixed>, level:int, damage:float, armor:float, power:float, faction:string, threat:array<int,float>, lastAttack:float, spawned:float}> */
+    /** @var array<int, array<string,mixed>> */
     private array $active = [];
     /** @var array<string,true> */
     private array $invalidLevelWarnings = [];
@@ -84,7 +84,8 @@ final class MobManager
         $entity->getAttributeMap()->get(Attribute::KNOCKBACK_RESISTANCE)?->setValue($knockback, true);
         $display = (string) ($definition["Display"] ?? $key);
         $display = str_replace(["<caster.level>", "<mob.level>", "<caster.name>"], [(string) $level, (string) $level, $key], $display);
-        $entity->setNameTag(MythicMobs::color($display));
+        $baseName = MythicMobs::color($display);
+        $entity->setNameTag($baseName);
         $entity->setNameTagAlwaysVisible((bool) ($options["AlwaysShowName"] ?? true));
         $entity->setCanSaveWithChunk(false);
         foreach ((array) ($definition["Equipment"] ?? []) as $equipment) {
@@ -113,6 +114,8 @@ final class MobManager
             "damage" => $damage, "armor" => $armor, "power" => $power,
             "faction" => $faction, "threat" => [],
             "lastAttack" => 0.0, "spawned" => microtime(true), "lastTarget" => null,
+            "stack" => 1,
+            "baseName" => $entity->getNameTag(),
         ];
         $entity->spawnToAll();
         if (is_array($definition["BossBar"] ?? null)) {
@@ -242,10 +245,50 @@ final class MobManager
                 continue;
             }
 
-            ++$count;
+            $count += max(1, (int) ($data["stack"] ?? 1));
         }
 
         return $count;
+    }
+
+    public function addToNearbyStack(
+        string $key,
+        Position $position,
+        float $radius = 2.0
+    ): ?Living {
+        $maximumDistance = $radius * $radius;
+        foreach ($this->active as &$data) {
+            $entity = $data["entity"];
+            if (
+                $entity->isClosed() ||
+                strcasecmp($data["key"], $key) !== 0 ||
+                $entity->getWorld() !== $position->getWorld() ||
+                $entity->getPosition()->distanceSquared($position) >
+                $maximumDistance
+            ) {
+                continue;
+            }
+
+            $data["stack"] = max(1, (int) ($data["stack"] ?? 1)) + 1;
+            $this->updateStackName($data);
+            return $entity;
+        }
+        unset($data);
+
+        return null;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function updateStackName(array $data): void
+    {
+        $entity = $data["entity"];
+        $baseName = (string) ($data["baseName"] ?? $data["key"]);
+        $stack = max(1, (int) ($data["stack"] ?? 1));
+        $entity->setNameTag(
+            $stack > 1
+                ? $baseName . MythicMobs::color(" &7×$stack")
+                : $baseName
+        );
     }
 
     public function hasNearbyMob(
@@ -374,7 +417,8 @@ final class MobManager
         $entity->getAttributeMap()->get(Attribute::KNOCKBACK_RESISTANCE)?->setValue($knockback, true);
         $entity->configureMythic($data["key"], $definition, $level, $data["faction"], $data["damage"]);
         $display = str_replace(["<caster.level>", "<mob.level>", "<caster.name>"], [(string) $level, (string) $level, $data["key"]], (string) ($definition["Display"] ?? $data["key"]));
-        $entity->setNameTag(MythicMobs::color($display));
+        $data["baseName"] = MythicMobs::color($display);
+        $this->updateStackName($data);
         $this->plugin->getBossBarManager()->updateLevel($entity, $level);
         return true;
     }
@@ -649,8 +693,16 @@ final class MobManager
             return;
         }
 
+        $stack = max(1, (int) ($data["stack"] ?? 1));
         $options = is_array($data["definition"]["Options"] ?? null) ? $data["definition"]["Options"] : [];
-        $drops = (bool) ($options["PreventOtherDrops"] ?? false) ? [] : $event->getDrops();
+        $drops = [];
+        if (!(bool) ($options["PreventOtherDrops"] ?? false)) {
+            for ($roll = 0; $roll < $stack; ++$roll) {
+                foreach ($event->getDrops() as $drop) {
+                    $drops[] = clone $drop;
+                }
+            }
+        }
         $entries = array_values((array) ($data["definition"]["Drops"] ?? []));
         $perPlayer = (bool) (
             $data["definition"]["DropsPerPlayer"]
@@ -662,20 +714,30 @@ final class MobManager
         );
 
         if ($perPlayer) {
-            $this->dropForParticipants($mob, $data, $entries, $options);
+            $this->dropForParticipants(
+                $mob,
+                $data,
+                $entries,
+                $options,
+                $stack
+            );
         } else {
-            $drops = [
-                ...$drops,
-                ...$this->plugin->getDropManager()->roll(
-                    $entries,
-                    (int) $data["level"],
-                ),
-            ];
+            for ($roll = 0; $roll < $stack; ++$roll) {
+                $drops = [
+                    ...$drops,
+                    ...$this->plugin->getDropManager()->roll(
+                        $entries,
+                        (int) $data["level"],
+                    ),
+                ];
+            }
         }
 
         $event->setDrops($drops);
         if (isset($data["definition"]["Experience"])) {
-            $event->setXpDropAmount(max(0, (int) $data["definition"]["Experience"]));
+            $event->setXpDropAmount(
+                max(0, (int) $data["definition"]["Experience"]) * $stack
+            );
         }
     }
 
@@ -689,6 +751,7 @@ final class MobManager
         array $data,
         array $entries,
         array $options,
+        int $stack,
     ): void {
         $minimum = (float) (
             $data["definition"]["MinimumDamagePercentForDrops"]
@@ -722,14 +785,21 @@ final class MobManager
                 continue;
             }
 
-            $items = $this->plugin->getDropManager()->roll(
-                $entries,
-                (int) $data["level"],
-                $player,
-                $damagePercent,
-            );
-            foreach ($items as $item) {
-                $this->spawnPersonalDrop($mob, $player, $item, $clientSide);
+            for ($roll = 0; $roll < $stack; ++$roll) {
+                $items = $this->plugin->getDropManager()->roll(
+                    $entries,
+                    (int) $data["level"],
+                    $player,
+                    $damagePercent,
+                );
+                foreach ($items as $item) {
+                    $this->spawnPersonalDrop(
+                        $mob,
+                        $player,
+                        $item,
+                        $clientSide
+                    );
+                }
             }
         }
     }

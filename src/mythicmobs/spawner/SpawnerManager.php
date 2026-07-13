@@ -97,7 +97,18 @@ final class SpawnerManager
                 continue;
             }
             $this->spawned[$name] = array_values(array_filter($this->spawned[$name] ?? [], fn (int $id) => ($entity = $this->plugin->getServer()->getWorldManager()->findEntity($id)) !== null && !$entity->isClosed()));
-            if (count($this->spawned[$name]) >= max(1, (int) ($definition["MaxMobs"] ?? 1))) {
+            $stackable = (bool) (
+                $definition["Stackable"] ??
+                $this->plugin->mobSetting(
+                    "Configuration.Spawners.Stackable",
+                    false
+                )
+            );
+            if (
+                !$stackable &&
+                count($this->spawned[$name]) >=
+                max(1, (int) ($definition["MaxMobs"] ?? 1))
+            ) {
                 continue;
             }
             $radius = max(0, (int) ($definition["Radius"] ?? 0));
@@ -127,13 +138,6 @@ final class SpawnerManager
                 $this->lastSpawn[$name] = $now;
                 continue;
             }
-            $stackable = (bool) (
-                $definition["Stackable"] ??
-                $this->plugin->mobSetting(
-                    "Configuration.Spawners.Stackable",
-                    false
-                )
-            );
             if (
                 !$stackable &&
                 $this->plugin->getMobManager()->hasNearbyMob(
@@ -144,6 +148,24 @@ final class SpawnerManager
             ) {
                 $this->lastSpawn[$name] = $now;
                 continue;
+            }
+            if ($stackable) {
+                $stacked = $this->plugin->getMobManager()->addToNearbyStack(
+                    $mobName,
+                    $location,
+                    2.0
+                );
+                if ($stacked !== null) {
+                    if (!in_array(
+                        $stacked->getId(),
+                        $this->spawned[$name],
+                        true
+                    )) {
+                        $this->spawned[$name][] = $stacked->getId();
+                    }
+                    $this->lastSpawn[$name] = $now;
+                    continue;
+                }
             }
             $level = array_key_exists("Level", $definition) ? $this->plugin->getMobManager()->rollLevel($definition["Level"], "spawner $name") : 0;
             $entity = $this->plugin->getMobManager()->spawn($mobName, $location, $level, (bool) ($definition["UseWorldScaling"] ?? false));

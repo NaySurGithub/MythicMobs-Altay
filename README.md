@@ -609,12 +609,16 @@ guardian_temple:
   Radius: 4
   Interval: 30
   MaxMobs: 3
+  Stackable: true
+  MaxMobsPerChunk: 16
   Level: 3to6
   UseWorldScaling: false
   Enabled: true
 ```
 
 Spawner state can be created and modified in-game or from YAML. Runtime changes are saved to `Spawners/runtime.yml`.
+
+With `Stackable: true`, nearby identical mobs merge into one entity whose name shows `×N`. The stack uses one entity for performance while independently rolling the combined drops and experience of every mob represented by it. `MaxMobsPerChunk` limits the total represented mob count, not only the number of visible entities.
 
 ## Commands
 

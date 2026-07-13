@@ -1,6 +1,6 @@
 name: MythicMobs
 main: mythicmobs\MythicMobs
-version: 1.1.0
+version: 1.2.0
 api: 5.0.0
 author: Codex
 description: YAML-driven custom mobs, skills, items, drops, factions, AI and spawners for Altay/PocketMine.
