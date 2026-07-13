@@ -618,7 +618,7 @@ final class MythicMobs extends PluginBase implements Listener
         $sub = strtolower((string) ($args[0] ?? "help"));
         $sub = ["m" => "mobs", "i" => "items", "item" => "items", "s" => "spawners", "r" => "reload", "d" => "debug"][$sub] ?? $sub;
         if ($sub === "help") {
-            $sender->sendMessage(TextFormat::GOLD . "MythicMobs " . TextFormat::GRAY . "/mm reload|version|debug | mobs | items | models | spawners | test cast");
+            $this->sendHelp($sender, (int) ($args[1] ?? 1));
             return true;
         }
         if (!$sender->hasPermission("mythicmobs.admin")) {
@@ -680,6 +680,66 @@ final class MythicMobs extends PluginBase implements Listener
         }
         $sender->sendMessage(TextFormat::RED . "Unknown subcommand. Use /mm help.");
         return true;
+    }
+
+    private function sendHelp(CommandSender $sender, int $page): void
+    {
+        $pages = [
+            1 => [
+                "/mm help [page]" => "Show this command list.",
+                "/mm version" => "Show the installed plugin version.",
+                "/mm mobs list" => "List all configured mobs.",
+                "/mm mobs info <mob>" => "Show a mob's configuration.",
+                "/mm mobs listactive" => "Show active custom mob counts.",
+                "/mm mobs spawn <mob>:<level> [amount]" => "Spawn a custom mob.",
+                "/mm mobs kill <mob>" => "Remove active mobs by name.",
+                "/mm mobs killall" => "Remove every active custom mob.",
+            ],
+            2 => [
+                "/mm items list" => "List all configured items.",
+                "/mm items info <item>" => "Show an item's information.",
+                "/mm items get <item> [amount]" => "Give yourself a custom item.",
+                "/mm items give <player> <item> [amount]" => "Give a custom item to a player.",
+                "/mm skills cast <skill>" => "Cast a configured metaskill.",
+                "/mm models list" => "List all configured models.",
+                "/mm models build" => "Rebuild the model resource pack.",
+            ],
+            3 => [
+                "/mm spawners list" => "List all configured spawners.",
+                "/mm spawners info <name>" => "Show a spawner's configuration.",
+                "/mm spawners create <name> <mob> [seconds] [max]" => "Create a spawner.",
+                "/mm spawners set <name> <setting> <value>" => "Change a spawner setting.",
+                "/mm spawners activate <name>" => "Attempt to activate a spawner.",
+                "/mm spawners resettimers <name>" => "Reset a spawner timer.",
+                "/mm spawners delete <name>" => "Delete a runtime spawner.",
+            ],
+            4 => [
+                "/mm reload" => "Reload all MythicMobs files.",
+                "/mm save" => "Save runtime spawner state.",
+                "/mm debug <level>" => "Set the debug level.",
+                "/mm debugmode <true|false>" => "Toggle debug mode.",
+            ],
+        ];
+
+        $page = max(1, min(count($pages), $page));
+        $sender->sendMessage(
+            TextFormat::GOLD . "MythicMobs Help " .
+            TextFormat::YELLOW . "($page/" . count($pages) . ")"
+        );
+
+        foreach ($pages[$page] as $command => $description) {
+            $sender->sendMessage(
+                TextFormat::YELLOW . $command .
+                TextFormat::GRAY . " - " . $description
+            );
+        }
+
+        if ($page < count($pages)) {
+            $sender->sendMessage(
+                TextFormat::GRAY . "Next page: " .
+                TextFormat::WHITE . "/mm help " . ($page + 1)
+            );
+        }
     }
 
     private function mobCommand(CommandSender $sender, array $args): bool

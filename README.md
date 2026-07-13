@@ -622,7 +622,7 @@ The root command is `/mythicmobs`. Aliases: `/mm`, `/mythic`.
 
 | Command | Description |
 | --- | --- |
-| `/mm help` | Show command help. |
+| `/mm help [page]` | Show the paginated command help. |
 | `/mm version` | Show plugin and API version information. |
 | `/mm reload` | Reload configurations and definitions. |
 | `/mm debug <level>` | Set the persisted debug level. |
