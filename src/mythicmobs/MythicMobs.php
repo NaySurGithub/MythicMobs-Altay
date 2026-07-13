@@ -16,6 +16,7 @@ use mythicmobs\entity\CustomEntityManager;
 use mythicmobs\entity\SkeletalKnightEntity;
 use mythicmobs\model\ModelManager;
 use mythicmobs\bossbar\BossBarManager;
+use pocketmine\block\MonsterSpawner;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\entity\Location;
@@ -24,6 +25,8 @@ use pocketmine\entity\EntityDataHelper;
 use pocketmine\entity\EntityFactory;
 use pocketmine\entity\projectile\Projectile;
 use pocketmine\event\Listener;
+use pocketmine\event\block\BlockBreakEvent;
+use pocketmine\event\block\BlockPlaceEvent;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\EntityDeathEvent;
@@ -709,7 +712,7 @@ final class MythicMobs extends PluginBase implements Listener
                 "/mm spawners info <name>" => "Show a spawner's configuration.",
                 "/mm spawners create <name> <mob> [seconds] [max]" => "Create a spawner.",
                 "/mm spawners set <name> <setting> <value>" => "Change a spawner setting.",
-                "/mm spawners activate <name>" => "Attempt to activate a spawner.",
+                "/mm spawners give <name> [player]" => "Give an NBT spawner block.",
                 "/mm spawners resettimers <name>" => "Reset a spawner timer.",
                 "/mm spawners delete <name>" => "Delete a runtime spawner.",
             ],
@@ -879,8 +882,35 @@ final class MythicMobs extends PluginBase implements Listener
             $sender->sendMessage($ok ? TextFormat::GREEN . "Spawner updated." : TextFormat::RED . "Unknown spawner.");
             return true;
         }
-        if ($action === "activate") {
-            $sender->sendMessage($this->spawners->activate((string) ($args[1] ?? "")) ? TextFormat::GREEN . "Spawner activated." : TextFormat::RED . "Unknown spawner.");
+        if ($action === "give") {
+            $name = (string) ($args[1] ?? "");
+            $target = isset($args[2])
+                ? $this->getServer()->getPlayerExact((string) $args[2])
+                : ($sender instanceof Player ? $sender : null);
+            $item = $this->spawners->createItem($name);
+            if (!$target instanceof Player) {
+                $sender->sendMessage(
+                    TextFormat::RED .
+                    "Usage: /mm spawners give <name> <player>"
+                );
+                return true;
+            }
+            if ($item === null) {
+                $sender->sendMessage(TextFormat::RED . "Unknown spawner.");
+                return true;
+            }
+
+            $leftovers = $target->getInventory()->addItem($item);
+            foreach ($leftovers as $leftover) {
+                $target->getWorld()->dropItem(
+                    $target->getPosition(),
+                    $leftover
+                );
+            }
+            $sender->sendMessage(
+                TextFormat::GREEN .
+                "Gave spawner $name to " . $target->getName() . "."
+            );
             return true;
         }
         if ($action === "resettimers") {
@@ -904,6 +934,51 @@ final class MythicMobs extends PluginBase implements Listener
             return true;
         }
         return true;
+    }
+
+    /**
+     * @priority MONITOR
+     */
+    public function onSpawnerPlace(BlockPlaceEvent $event): void
+    {
+        foreach ($event->getTransaction()->getBlocks() as [, , , $block]) {
+            if (!$block instanceof MonsterSpawner) {
+                continue;
+            }
+
+            $name = $this->spawners->placeItem(
+                $event->getItem(),
+                $block->getPosition()
+            );
+            if ($name !== null) {
+                $event->getPlayer()->sendMessage(
+                    TextFormat::GREEN . "Placed Mythic spawner $name."
+                );
+            }
+        }
+    }
+
+    /**
+     * @priority HIGHEST
+     */
+    public function onSpawnerBreak(BlockBreakEvent $event): void
+    {
+        if (!$event->getBlock() instanceof MonsterSpawner) {
+            return;
+        }
+
+        $item = $this->spawners->removeAt(
+            $event->getBlock()->getPosition()
+        );
+        if ($item === null) {
+            return;
+        }
+
+        $event->setDrops([$item]);
+        $event->setXpDropAmount(0);
+        $event->getPlayer()->sendMessage(
+            TextFormat::YELLOW . "Recovered Mythic spawner."
+        );
     }
 
     public static function color(string $text): string

@@ -6,6 +6,9 @@ namespace mythicmobs\spawner;
 
 use mythicmobs\MythicMobs;
 use pocketmine\entity\Location;
+use pocketmine\item\Item;
+use pocketmine\item\StringToItemParser;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\Position;
 
 final class SpawnerManager
@@ -87,14 +90,133 @@ final class SpawnerManager
         $this->lastSpawn[$name] = 0;
         return true;
     }
-    public function activate(string $name): bool
+    public function createItem(string $name): ?Item
     {
-        if (!isset($this->definitions[$name])) {
-            return false;
+        $definition = $this->definitions[$name] ?? null;
+        if ($definition === null) {
+            return null;
         }
-        $this->lastSpawn[$name] = 0;
-        $this->tick();
-        return true;
+
+        $serialized = json_encode($definition, JSON_UNESCAPED_SLASHES);
+        $item = StringToItemParser::getInstance()->parse("monster_spawner");
+        if ($serialized === false || $item === null) {
+            return null;
+        }
+
+        $mob = (string) ($definition["MobName"] ?? $definition["Mob"] ?? "unknown");
+        $interval = max(1, (int) ($definition["Interval"] ?? 30));
+        $maximum = max(1, (int) ($definition["MaxMobs"] ?? 1));
+        $spawnerTag = CompoundTag::create()
+            ->setString("Name", $name)
+            ->setString("Definition", $serialized)
+            ->setString("MobName", $mob)
+            ->setInt("Interval", $interval)
+            ->setInt("MaxMobs", $maximum);
+
+        $tag = $item->getNamedTag();
+        $tag->setTag("MythicSpawner", $spawnerTag);
+        $item->setNamedTag($tag);
+        $item->setCustomName(MythicMobs::color("&6Mythic Spawner: &f$name"));
+        $item->setLore([
+            MythicMobs::color("&7Mob: &f$mob"),
+            MythicMobs::color("&7Interval: &f{$interval}s"),
+            MythicMobs::color("&7Maximum mobs: &f$maximum"),
+            MythicMobs::color("&8Place to activate this spawner."),
+        ]);
+
+        return $item;
+    }
+
+    public function placeItem(Item $item, Position $position): ?string
+    {
+        $stored = $this->readItem($item);
+        if ($stored === null) {
+            return null;
+        }
+
+        $definition = $stored["definition"];
+        $mob = (string) ($definition["MobName"] ?? $definition["Mob"] ?? "");
+        if ($mob === "" || !isset($this->plugin->getMobManager()->definitions()[$mob])) {
+            return null;
+        }
+
+        $name = $this->uniqueName($stored["name"]);
+        $definition["MobName"] = $mob;
+        unset($definition["Mob"]);
+        $definition["World"] = $position->getWorld()->getFolderName();
+        $definition["X"] = $position->getFloorX();
+        $definition["Y"] = $position->getFloorY();
+        $definition["Z"] = $position->getFloorZ();
+        $definition["Enabled"] = true;
+
+        $this->definitions[$name] = $definition;
+        $this->lastSpawn[$name] = microtime(true);
+        $this->spawned[$name] = [];
+        $this->saveRuntime();
+
+        return $name;
+    }
+
+    public function removeAt(Position $position): ?Item
+    {
+        foreach ($this->definitions as $name => $definition) {
+            if (!$this->isAt($definition, $position)) {
+                continue;
+            }
+
+            $item = $this->createItem($name);
+            $this->delete($name);
+            return $item;
+        }
+
+        return null;
+    }
+
+    /** @return array{name:string,definition:array<string,mixed>}|null */
+    private function readItem(Item $item): ?array
+    {
+        $tag = $item->getNamedTag()->getCompoundTag("MythicSpawner");
+        if ($tag === null) {
+            return null;
+        }
+
+        $name = trim($tag->getString("Name", ""));
+        $definition = json_decode(
+            $tag->getString("Definition", ""),
+            true
+        );
+        if ($name === "" || !is_array($definition)) {
+            return null;
+        }
+
+        return [
+            "name" => $name,
+            "definition" => $definition,
+        ];
+    }
+
+    private function uniqueName(string $base): string
+    {
+        if (!isset($this->definitions[$base])) {
+            return $base;
+        }
+
+        $suffix = 1;
+        do {
+            $name = $base . "_" . $suffix;
+            ++$suffix;
+        } while (isset($this->definitions[$name]));
+
+        return $name;
+    }
+
+    /** @param array<string,mixed> $definition */
+    private function isAt(array $definition, Position $position): bool
+    {
+        return (string) ($definition["World"] ?? "") === $position->getWorld()->getFolderName()
+            && (int) ($definition["X"] ?? PHP_INT_MIN) === $position->getFloorX()
+            && (int) ($definition["Y"] ?? PHP_INT_MIN) === $position->getFloorY()
+            && (int) ($definition["Z"] ?? PHP_INT_MIN) === $position->getFloorZ();
     }
     public function set(string $name, string $setting, mixed $value): bool
     {
