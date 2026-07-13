@@ -42,6 +42,7 @@ use pocketmine\event\player\PlayerDeathEvent;
 use pocketmine\event\player\PlayerEntityInteractEvent;
 use pocketmine\event\player\PlayerItemUseEvent;
 use pocketmine\event\player\PlayerDropItemEvent;
+use pocketmine\event\player\PlayerPostChunkSendEvent;
 use pocketmine\item\Item;
 use pocketmine\item\enchantment\EnchantmentInstance;
 use pocketmine\item\enchantment\StringToEnchantmentParser;
@@ -1004,6 +1005,15 @@ final class MythicMobs extends PluginBase implements Listener
         $event->setXpDropAmount(0);
         $event->getPlayer()->sendMessage(
             TextFormat::YELLOW . "Recovered Mythic spawner."
+        );
+    }
+
+    public function onSpawnerChunkSent(PlayerPostChunkSendEvent $event): void
+    {
+        $this->spawners->sendDisplaysInChunk(
+            $event->getPlayer(),
+            $event->getChunkX(),
+            $event->getChunkZ()
         );
     }
 

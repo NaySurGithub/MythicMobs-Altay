@@ -14,6 +14,7 @@ use pocketmine\item\StringToItemParser;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
+use pocketmine\player\Player;
 use pocketmine\world\Position;
 
 final class SpawnerManager
@@ -202,8 +203,11 @@ final class SpawnerManager
         return null;
     }
 
-    public function updateDisplay(string $name, Position $position): bool
-    {
+    public function updateDisplay(
+        string $name,
+        Position $position,
+        ?Player $player = null
+    ): bool {
         $definition = $this->definitions[$name] ?? null;
         if ($definition === null) {
             return false;
@@ -249,9 +253,39 @@ final class SpawnerManager
             BlockPosition::fromVector3($position),
             $tile->getSerializedSpawnCompound()
         );
-        $world->broadcastPacketToViewers($position, $packet);
+        if ($player !== null) {
+            $player->getNetworkSession()->sendDataPacket($packet);
+        } else {
+            $world->broadcastPacketToViewers($position, $packet);
+        }
 
         return true;
+    }
+
+    public function sendDisplaysInChunk(
+        Player $player,
+        int $chunkX,
+        int $chunkZ
+    ): void {
+        $world = $player->getWorld();
+        $worldName = $world->getFolderName();
+        foreach ($this->definitions as $name => $definition) {
+            if (
+                (string) ($definition["World"] ?? "") !== $worldName ||
+                ((int) ($definition["X"] ?? 0) >> 4) !== $chunkX ||
+                ((int) ($definition["Z"] ?? 0) >> 4) !== $chunkZ
+            ) {
+                continue;
+            }
+
+            $position = new Position(
+                (float) ($definition["X"] ?? 0),
+                (float) ($definition["Y"] ?? 0),
+                (float) ($definition["Z"] ?? 0),
+                $world
+            );
+            $this->updateDisplay($name, $position, $player);
+        }
     }
 
     public function refreshDisplays(): void
