@@ -89,6 +89,7 @@ final class CameraPresetManager
             null,
             null,
             null,
+            null,
             $audioListenerType,
             $playerEffects,
             null,
