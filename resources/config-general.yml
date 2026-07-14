@@ -34,7 +34,8 @@ Configuration:
     RandomSpawning: 1
     Scanner: 10
     Cleanup: 600
-  Compatibility:
+#SOON
+Compatibility:
     ProtocolLib:
       Enabled: false
     Heroes:
